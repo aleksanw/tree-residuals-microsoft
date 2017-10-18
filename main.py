@@ -54,15 +54,15 @@ class ResidualBoostingApproximator:
     def update(self, updates):
         """Update approximator.
         """
-        regressor = sklearn.tree.DecisionTreeRegressor(max_depth=5)
+        regressor = sklearn.tree.DecisionTreeRegressor(max_depth=2)
+        learning_rate = 0.15
 
-        learning_rate = 0.2
-        residuals = [(x, learning_rate*(y-self.q(x))) for (x, y) in updates]
+        residuals = [(x, (y-self.q(x))) for (x, y) in updates]
         xs, ys = zip(*residuals)
         if not any(ys):
             return
         h = regressor.fit(xs, ys)
-        self.funsum += h.predict
+        self.funsum += lambda x: learning_rate*h.predict(x)
 
     def __call__(self, arg):
         return self.q(arg)
@@ -89,6 +89,8 @@ class Greedy:
     def __call__(self, state):
         """Get most promising action.
         """
+        # memorize self.q
+        random.shuffle(self.actions)
         return max(self.actions, key=lambda x: self.q((state,x)))
 
 
@@ -146,8 +148,8 @@ def test_rollout(policy, env):
 
 
 def test_policy(policy, env):
-    reward = test_rollout(policy, env)
-    if reward != 0:
+    reward = np.average([test_rollout(policy, env) for _ in range(100)])
+    if reward > 0.6:
         print("Sucess!!!! <:O")
         sys.exit()
 
@@ -166,7 +168,7 @@ def policy_display(policy):
             observation = y*4+x
             out += arrows[policy(observation)]
         out += "\n"
-    print(out)
+    return out
 
 
 def runner():
@@ -189,10 +191,12 @@ def runner():
         episodes = (rollout(policy, env) for _ in range(episode_batch_size))
         learner.learn(episodes)
 
-        greedy_policy = learner.make_policy_greedy()
-        print(f"Episode {episode_number}")
-        policy_display(greedy_policy)
         test_policy(greedy_policy, env)
+        greedy_policy = learner.make_policy_greedy()
+        disp = policy_display(greedy_policy)
+        print(f"Episode {episode_number}")
+        print(disp)
+
 
 if __name__ == '__main__':
     runner()
