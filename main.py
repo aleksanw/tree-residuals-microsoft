@@ -1,8 +1,12 @@
 import gym  # OpenAI gym
 import sklearn.tree
 import numpy as np
-from time import sleep
 import random
+
+# Used under development
+import sys
+from time import sleep
+from pprint import pprint
 
 class FunctionSum:
     """Function summation.
@@ -39,21 +43,29 @@ class Table:
     def __call__(self, arg):
         return self.table.get(arg, 0.0)
 
+asd = False
 class ResidualBoostingApproximator:
-    #FIXME types
     def __init__(self):
-        self.q = FunctionSum()
+        self.funsum = FunctionSum()
 
-    def update(self, x, updated_y):
+    def q(self, arg):
+        return self.funsum((arg,))
+
+    def update(self, updates):
         """Update approximator.
         """
-        residual = updated_y - self.q(x)
-        regressor = sklearn.tree.DecisionTreeRegressor(max_depth=10)
-        h = regressor.fit(x, residual)
-        self.q += h.predict
+        regressor = sklearn.tree.DecisionTreeRegressor(max_depth=5)
 
-    def __call__(self, *args, **kwargs):
-        return self.q(*args, **kwargs)
+        learning_rate = 0.2
+        residuals = [(x, learning_rate*(y-self.q(x))) for (x, y) in updates]
+        xs, ys = zip(*residuals)
+        if not any(ys):
+            return
+        h = regressor.fit(xs, ys)
+        self.funsum += h.predict
+
+    def __call__(self, arg):
+        return self.q(arg)
 
 class EpsilonGreedy:
     def __init__(self, epsilon, actions, q):
@@ -83,25 +95,28 @@ class Greedy:
 class TD0:
     """Learner type.  Implements greedy TD(0)
     """
-    def __init__(self, action_space, q):
+    def __init__(self, epsilon, action_space, q):
         self.q = q
         self.actions = action_space
-        self.epsilon = 0.8
+        self.epsilon = epsilon
 
     def td_target(self, reward, newstate):
         newstate_value = max(self.q((newstate, action)) for action in self.actions)
-        discount = 0.1
+        discount = 0.90
         return reward + discount * newstate_value
 
     def learn(self, episodes):
+        updates = []
         for episode in episodes:
-            updates = []
             for state, action, reward, newstate in episode:
                 updates.append(((state, action), self.td_target(reward, newstate)))
-            self.q.update(updates)
+        self.q.update(updates)
 
     def make_policy(self):
         return EpsilonGreedy(self.epsilon, self.actions, self.q)
+
+    def make_policy_greedy(self):
+        return Greedy(self.actions, self.q)
 
 
 # Types:
@@ -131,10 +146,10 @@ def test_rollout(policy, env):
 
 
 def test_policy(policy, env):
-    reward_sum = 0
-    for episode_number in range(1000):
-        reward_sum += test_rollout(policy, env)
-    print(reward_sum/episode_number)
+    reward = test_rollout(policy, env)
+    if reward != 0:
+        print("Sucess!!!! <:O")
+        sys.exit()
 
 
 def policy_display(policy):
@@ -158,22 +173,26 @@ def runner():
     env = gym.make('FrozenLake-v0')
     env.unwrapped.P = {s:{a:([(1.0, y[1][1], y[1][2], y[1][3])] if len(y) == 3 else y) for (a,y) in x.items()} for (s,x) in env.unwrapped.P.items()}
     action_space = list(range(env.action_space.n))
-    qlearner = Table()
 
-    greedy_policy = Greedy(action_space, qlearner)
-    policy_display(greedy_policy)
+    epsilon = 0.35
+    episode_number = 0
 
-    learner = TD0(action_space, qlearner)
+    qlearner = ResidualBoostingApproximator()
+    learner = TD0(epsilon, action_space, qlearner)
 
-    for episode_number in range(100000):
-        if(episode_number % 100 == 0):
-            print(f"Episode {episode_number}")
-            test_policy(greedy_policy, env)
-            policy_display(greedy_policy)
-
+    print(f"epsilon: {epsilon}")
+    while True:
         policy = learner.make_policy()
-        episode = rollout(policy, env)
-        learner.learn([episode])
+
+        episode_batch_size = 10
+        episode_number += episode_batch_size
+        episodes = (rollout(policy, env) for _ in range(episode_batch_size))
+        learner.learn(episodes)
+
+        greedy_policy = learner.make_policy_greedy()
+        print(f"Episode {episode_number}")
+        policy_display(greedy_policy)
+        test_policy(greedy_policy, env)
 
 if __name__ == '__main__':
     runner()
