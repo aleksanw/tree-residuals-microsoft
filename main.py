@@ -4,33 +4,15 @@ import numpy as np
 import random
 import itertools
 
+import corridor
+
 # Used under development
 import sys
 from time import sleep
 from pprint import pprint
 
-class FunctionSum:
-    """Function summation.
 
-    Usage:
-    funsum = FunctionSum()
-    funsum += fun1
-    funsum += fun2
-    funsum_at_x = funsum(x)
-    """
-    def __init__(self):
-        self.fs = []
-
-    def __call__(self, *args, **kwargs):
-        return sum(f(*args, **kwargs) for f in self.fs)
-
-    def __iadd__(self, f):
-        assert callable(f)
-        self.fs.append(f)
-        return self
-
-class Table:
-    # denumpyfied
+class Approximator_Table:
     def __init__(self):
         self.table = {}
 
@@ -39,42 +21,42 @@ class Table:
         updates: ((arg, val), ...)
         arg must be hashable
         """
-        learning_rate = 0.001
-        for x,y in updates:
-            self.table[x] = (1-learning_rate)*self.table.get(x,0.0) + learning_rate*y
+        self.table.update(updates)
 
     def __call__(self, arg):
         return self.table.get(arg, 0.0)
 
-asd = False
-class ResidualBoostingApproximator:
-    def __init__(self):
-        self.funsum = FunctionSum()
 
-    def q(self, arg):
-        return self.funsum((arg,))
+class Approximator_ResidualBoosting:
+
+    def __init__(self):
+        self.trees = []
+        self.tree_regressor = sklearn.tree.DecisionTreeRegressor(max_depth=2)
 
     def update(self, updates):
         """Update approximator.
         """
-        regressor = sklearn.tree.DecisionTreeRegressor(max_depth=2)
-        learning_rate = 0.15
-
-        residuals = [(x, (y-self.q(x))) for (x, y) in updates]
+        residuals = [(x, (y - self(x))) for (x, y) in updates]
         xs, ys = zip(*residuals)
+
+        # No value in keeping all-zero trees
         if not any(ys):
             return
-        h = regressor.fit(xs, ys)
-        self.funsum += lambda x: learning_rate*h.predict(x)
 
+        h = self.tree_regressor.fit(xs, ys)
+        self.trees.append(h.predict(x))
+
+    # TODO? memorize
     def __call__(self, arg):
-        return self.q(arg)
+        return sum(tree(arg) for tree in self.trees)
 
-class EpsilonGreedy:
-    def __init__(self, epsilon, actions, q):
-        self.actions = actions
+
+class Policy_EpsilonGreedy:
+    def __init__(self, q, actions, epsilon):
         self.q = q
+        self.actions = actions
         self.epsilon = epsilon
+
         self.greedy = Greedy(actions, q)
 
     def __call__(self, state):
@@ -84,128 +66,86 @@ class EpsilonGreedy:
             return self.greedy(state)
 
 
-class Greedy:
-    def __init__(self, actions, q):
-        self.actions = actions
+class Policy_Greedy:
+    def __init__(self, q, actions):
         self.q = q
+        self.actions = actions
 
     def __call__(self, state):
         """Get most promising action.
         """
-        # memorize self.q
         random.shuffle(self.actions)
-        return max(self.actions, key=lambda x: self.q((state,x)))
-
-class TDlambda:
-    def __init__(self, epsilon, action_space, q, lambda_):
-        self.q = q
-        self.actions = action_space
-        self.epsilon = epsilon
-        self.lambda_ = lambda_
-
-    def learn(self, episodes):
-        updates = []
-        for episode in episodes:
-            future_reward = 0.0
-            episode = list(episode)
-            T = len(episode)
-            for t, (state, action, reward, _) in enumerate(episode[::-1]):
-                #discount = (1 - self.lambda_) * self.lambda_**(T-t)
-                discount = 0.95
-                future_reward = reward + discount*future_reward
-                update = ((state, action), future_reward)
-                updates.append(update)
-        self.q.update(updates)
-
-    def make_policy(self):
-        return EpsilonGreedy(self.epsilon, self.actions, self.q)
-
-    def make_policy_greedy(self):
-        return Greedy(self.actions, self.q)
+        return max(self.actions, key=lambda x: self.q((*state,x)))
 
 
-class TD0:
-    """Learner type.  Implements greedy TD(0)
+def TDinf_targets(episodes, q):
+    """Generate td_targets (TDinf).
+    episodes = (episode, ..)
+    episode = (state, action, reward, newstate)
+    Events in episode must come in order. That is event[0].newstate == event[1].state.
     """
-    def __init__(self, epsilon, action_space, q):
-        self.q = q
-        self.actions = action_space
-        self.epsilon = epsilon
-
-    def td_target(self, reward, newstate):
-        newstate_value = max(self.q((newstate, action)) for action in self.actions)
-        discount = 0.95
-        return reward + discount * newstate_value
-
-    def learn(self, episodes):
-        updates = []
-        for episode in episodes:
-            for state, action, reward, newstate in episode:
-                updates.append(((state, action), max(self.q((state, action)), self.td_target(reward, newstate))))
-        self.q.update(updates)
-
-    def make_policy(self):
-        return EpsilonGreedy(self.epsilon, self.actions, self.q)
-
-    def make_policy_greedy(self):
-        return Greedy(self.actions, self.q)
+    discount = 0.95
+    for episode in episodes:
+        episode = list(episode)
+        # Work backwards and calculate td_targets
+        td_target = 0.0  # assuming episode is a full rollout
+        for state, action, reward, _ in episode[::-1]:
+            td_target = reward + discount*td_target
+            yield ((*state, action), td_target)
 
 
-# Types:
-#  - Learner:
-#      Takes batches of episodes of (state, action, reward, next_state) triplets.
-#      Produces policies on request.
-#  - Policy:
+def v(q, action_space, state):
+    return max(q((*state, x)) for x in action_space)
 
-#      May have internal state.  Results in an action when applied to a state.
+
+def TD0_targets(epsiodes, q, action_space):
+    for episode in episodes:
+        for state, action, reward, newstate in episode:
+            td_target = reward + discount*v(q, action_space, newstate)
+            yield ((*state, action), td_target)
+
 
 def rollout(policy, env):
     state = env.reset()
     done = False
     while not done:
-        action = policy(state)
+        action = policy((state,))
         newstate, reward, done, _ = env.step(action)
         yield state, action, reward, newstate
         state = newstate
 
+
+def make_policy(self):
+    return EpsilonGreedy(self.epsilon, self.actions, self.q)
+
+
+def make_policy_greedy(self):
+    return Greedy(self.actions, self.q)
+
+
+
 def test_rollout(policy, env):
     state = env.reset()
     done = False
+    reward_sum = 0
+    step_n = 0
     while not done:
-        action = policy(state)
+        action = policy((state, step_n))
         state, reward, done, _ = env.step(action)
-    return reward
+        reward_sum += reward
+        step_n += 1
+    return reward_sum
 
 
 def test_policy(policy, env):
-    reward = np.average([test_rollout(policy, env) for _ in range(100)])
-    if reward > 0.5:
-        print("Sucess!!!! <:O")
-
-
-def policy_display(policy):
-    arrows = '←↓→↑'
-    out = ""
-    for y in range(4):
-        for x in range(4):
-            if (y,x) in [(1,1), (1,3), (2,3), (3,0)]:
-                out += ' '
-                continue
-            if (y,x) == (3,3):
-                out += 'T'
-                continue
-            observation = y*4+x
-            out += arrows[policy(observation)]
-        out += "\n"
-    return out
-
+    return np.average([test_rollout(policy, env) for _ in range(10)])
 
 def runner():
-    env = gym.make('FrozenLake-v0')
+    env = gym.make('CorridorSmall-v5')
     #env.unwrapped.P = {s:{a:([(1.0, y[1][1], y[1][2], y[1][3])] if len(y) == 3 else y) for (a,y) in x.items()} for (s,x) in env.unwrapped.P.items()}
     action_space = list(range(env.action_space.n))
 
-    epsilon = 0.8
+    epsilon = 0.5
     episode_number = 0
     learn_number = 0
     lambda_ = 0.9
@@ -214,49 +154,23 @@ def runner():
     learner = TDlambda(epsilon, action_space, qlearner, lambda_=lambda_)
 
     print(f"epsilon: {epsilon}")
-    saved_policy = learner.make_policy()
     for i in itertools.count():
-        epsilon *= 0.999
-        if learn_number % 10 == 0:
-            policy = saved_policy
-            saved_policy = learner.make_policy()
-        learn_number += 1
+        epsilon *= 0.9999
 
         episode_batch_size = 1
         episode_number += episode_batch_size
+        policy = learner.make_policy()
         episodes = (rollout(policy, env) for _ in range(episode_batch_size))
         learner.learn(episodes)
 
         if i % 1000 == 0:
             greedy_policy = learner.make_policy_greedy()
-            disp = q_print(qlearner)
-            disp+= policy_display(greedy_policy)
             print(f"Episode {episode_number}")
-            print(disp)
-            #test_policy(greedy_policy, env)
-
-
-
-
-def q_print(q):
-    def cell(state):
-        if state in (5, 7, 11, 12, 15):
-            return (' '*15,)*4
-        l = q((state,0))
-        d = q((state,1))
-        r = q((state,2))
-        u = q((state,3))
-        return (
-            f"---------------",
-            f"     {u:2.2f}     |",
-            f" {l:2.2f} {state:2} {r:2.2f} |",
-            f"     {d:2.2f}     |",
-        )
-    out = '===================================================================\n'
-    for y in range(4):
-        line = ('',)*4
-        out += ('\n'.join(map(''.join, zip(*(cell(4*y+x) for x in range(4)))))) + '\n'
-    return out
+            reward = test_policy(greedy_policy, env)
+            print(reward)
+            if reward > 100:
+                print("Sucess!!!! o<:)~")
+                return
 
 if __name__ == '__main__':
     runner()
