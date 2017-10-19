@@ -2,6 +2,7 @@ import gym  # OpenAI gym
 import sklearn.tree
 import numpy as np
 import random
+import itertools
 
 # Used under development
 import sys
@@ -38,7 +39,9 @@ class Table:
         updates: ((arg, val), ...)
         arg must be hashable
         """
-        self.table.update(updates)
+        learning_rate = 0.001
+        for x,y in updates:
+            self.table[x] = (1-learning_rate)*self.table.get(x,0.0) + learning_rate*y
 
     def __call__(self, arg):
         return self.table.get(arg, 0.0)
@@ -93,6 +96,33 @@ class Greedy:
         random.shuffle(self.actions)
         return max(self.actions, key=lambda x: self.q((state,x)))
 
+class TDlambda:
+    def __init__(self, epsilon, action_space, q, lambda_):
+        self.q = q
+        self.actions = action_space
+        self.epsilon = epsilon
+        self.lambda_ = lambda_
+
+    def learn(self, episodes):
+        updates = []
+        for episode in episodes:
+            future_reward = 0.0
+            episode = list(episode)
+            T = len(episode)
+            for t, (state, action, reward, _) in enumerate(episode[::-1]):
+                #discount = (1 - self.lambda_) * self.lambda_**(T-t)
+                discount = 0.95
+                future_reward = reward + discount*future_reward
+                update = ((state, action), future_reward)
+                updates.append(update)
+        self.q.update(updates)
+
+    def make_policy(self):
+        return EpsilonGreedy(self.epsilon, self.actions, self.q)
+
+    def make_policy_greedy(self):
+        return Greedy(self.actions, self.q)
+
 
 class TD0:
     """Learner type.  Implements greedy TD(0)
@@ -104,14 +134,14 @@ class TD0:
 
     def td_target(self, reward, newstate):
         newstate_value = max(self.q((newstate, action)) for action in self.actions)
-        discount = 0.90
+        discount = 0.95
         return reward + discount * newstate_value
 
     def learn(self, episodes):
         updates = []
         for episode in episodes:
             for state, action, reward, newstate in episode:
-                updates.append(((state, action), self.td_target(reward, newstate)))
+                updates.append(((state, action), max(self.q((state, action)), self.td_target(reward, newstate))))
         self.q.update(updates)
 
     def make_policy(self):
@@ -149,9 +179,8 @@ def test_rollout(policy, env):
 
 def test_policy(policy, env):
     reward = np.average([test_rollout(policy, env) for _ in range(100)])
-    if reward > 0.6:
+    if reward > 0.5:
         print("Sucess!!!! <:O")
-        sys.exit()
 
 
 def policy_display(policy):
@@ -173,30 +202,61 @@ def policy_display(policy):
 
 def runner():
     env = gym.make('FrozenLake-v0')
-    env.unwrapped.P = {s:{a:([(1.0, y[1][1], y[1][2], y[1][3])] if len(y) == 3 else y) for (a,y) in x.items()} for (s,x) in env.unwrapped.P.items()}
+    #env.unwrapped.P = {s:{a:([(1.0, y[1][1], y[1][2], y[1][3])] if len(y) == 3 else y) for (a,y) in x.items()} for (s,x) in env.unwrapped.P.items()}
     action_space = list(range(env.action_space.n))
 
-    epsilon = 0.35
+    epsilon = 0.8
     episode_number = 0
+    learn_number = 0
+    lambda_ = 0.9
 
-    qlearner = ResidualBoostingApproximator()
-    learner = TD0(epsilon, action_space, qlearner)
+    qlearner = Table()
+    learner = TDlambda(epsilon, action_space, qlearner, lambda_=lambda_)
 
     print(f"epsilon: {epsilon}")
-    while True:
-        policy = learner.make_policy()
+    saved_policy = learner.make_policy()
+    for i in itertools.count():
+        epsilon *= 0.999
+        if learn_number % 10 == 0:
+            policy = saved_policy
+            saved_policy = learner.make_policy()
+        learn_number += 1
 
-        episode_batch_size = 10
+        episode_batch_size = 1
         episode_number += episode_batch_size
         episodes = (rollout(policy, env) for _ in range(episode_batch_size))
         learner.learn(episodes)
 
-        test_policy(greedy_policy, env)
-        greedy_policy = learner.make_policy_greedy()
-        disp = policy_display(greedy_policy)
-        print(f"Episode {episode_number}")
-        print(disp)
+        if i % 1000 == 0:
+            greedy_policy = learner.make_policy_greedy()
+            disp = q_print(qlearner)
+            disp+= policy_display(greedy_policy)
+            print(f"Episode {episode_number}")
+            print(disp)
+            #test_policy(greedy_policy, env)
 
+
+
+
+def q_print(q):
+    def cell(state):
+        if state in (5, 7, 11, 12, 15):
+            return (' '*15,)*4
+        l = q((state,0))
+        d = q((state,1))
+        r = q((state,2))
+        u = q((state,3))
+        return (
+            f"---------------",
+            f"     {u:2.2f}     |",
+            f" {l:2.2f} {state:2} {r:2.2f} |",
+            f"     {d:2.2f}     |",
+        )
+    out = '===================================================================\n'
+    for y in range(4):
+        line = ('',)*4
+        out += ('\n'.join(map(''.join, zip(*(cell(4*y+x) for x in range(4)))))) + '\n'
+    return out
 
 if __name__ == '__main__':
     runner()
