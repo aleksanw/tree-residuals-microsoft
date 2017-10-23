@@ -13,15 +13,20 @@ from pprint import pprint
 
 
 class Approximator_Table:
-    def __init__(self):
+    def __init__(self, action_space):
         self.table = {}
+        self.action_space = action_space
 
-    def update(self, updates):
+    def apply_learning_rate(self, learning_rate, targets):
+        for x,y in targets:
+            yield x, learning_rate*y + (1-learning_rate)*self(x)
+
+    def learn(self, learning_rate, targets):
         """
         updates: ((arg, val), ...)
         arg must be hashable
         """
-        self.table.update(updates)
+        self.table.update(self.apply_learning_rate(learning_rate, targets))
 
     def __call__(self, arg):
         return self.table.get(arg, 0.0)
@@ -29,14 +34,15 @@ class Approximator_Table:
 
 class Approximator_ResidualBoosting:
 
-    def __init__(self):
+    def __init__(self, action_space):
         self.trees = []
         self.tree_regressor = sklearn.tree.DecisionTreeRegressor(max_depth=2)
+        self.action_space = action_space
 
-    def update(self, updates):
+    def learn(self, learning_rate, targets):
         """Update approximator.
         """
-        residuals = [(x, (y - self(x))) for (x, y) in updates]
+        residuals = [(x, (y - self(x))) for (x, y) in targets]
         xs, ys = zip(*residuals)
 
         # No value in keeping all-zero trees
@@ -44,7 +50,7 @@ class Approximator_ResidualBoosting:
             return
 
         h = self.tree_regressor.fit(xs, ys)
-        self.trees.append(h.predict(x))
+        self.trees.append(lambda x: learning_rate*h.predict(x))
 
     # TODO? memorize
     def __call__(self, arg):
@@ -52,30 +58,27 @@ class Approximator_ResidualBoosting:
 
 
 class Policy_EpsilonGreedy:
-    def __init__(self, q, actions, epsilon):
+    def __init__(self, q, epsilon):
         self.q = q
-        self.actions = actions
         self.epsilon = epsilon
-
-        self.greedy = Greedy(actions, q)
+        self.greedy = Policy_Greedy(q)
 
     def __call__(self, state):
         if random.random() < self.epsilon:
-            return random.choice(self.actions)
+            return random.choice(self.q.action_space)
         else:
             return self.greedy(state)
 
 
 class Policy_Greedy:
-    def __init__(self, q, actions):
+    def __init__(self, q):
         self.q = q
-        self.actions = actions
 
     def __call__(self, state):
         """Get most promising action.
         """
-        random.shuffle(self.actions)
-        return max(self.actions, key=lambda x: self.q((*state,x)))
+        random.shuffle(self.q.action_space)
+        return max(self.q.action_space, key=lambda x: self.q((*state,x)))
 
 
 def TDinf_targets(episodes, q):
@@ -94,83 +97,60 @@ def TDinf_targets(episodes, q):
             yield ((*state, action), td_target)
 
 
-def v(q, action_space, state):
-    return max(q((*state, x)) for x in action_space)
+def v(q, state):
+    return max(q((*state, x)) for x in q.action_space)
 
 
-def TD0_targets(epsiodes, q, action_space):
+def TD0_targets(episodes, q):
+    discount = 0.95
     for episode in episodes:
         for state, action, reward, newstate in episode:
-            td_target = reward + discount*v(q, action_space, newstate)
+            td_target = reward + discount*v(q, newstate)
             yield ((*state, action), td_target)
 
 
 def rollout(policy, env):
-    state = env.reset()
+    state = (env.reset(),)
     done = False
     while not done:
-        action = policy((state,))
+        action = policy(state)
         newstate, reward, done, _ = env.step(action)
-        yield state, action, reward, newstate
-        state = newstate
-
-
-def make_policy(self):
-    return EpsilonGreedy(self.epsilon, self.actions, self.q)
-
-
-def make_policy_greedy(self):
-    return Greedy(self.actions, self.q)
-
+        yield state, action, reward, (newstate,)
+        state = (newstate,)
 
 
 def test_rollout(policy, env):
-    state = env.reset()
-    done = False
     reward_sum = 0
-    step_n = 0
-    while not done:
-        action = policy((state, step_n))
-        state, reward, done, _ = env.step(action)
+    for (_, _, reward, _) in rollout(policy, env):
         reward_sum += reward
-        step_n += 1
     return reward_sum
 
 
 def test_policy(policy, env):
     return np.average([test_rollout(policy, env) for _ in range(10)])
 
+
 def runner():
     env = gym.make('CorridorSmall-v5')
     #env.unwrapped.P = {s:{a:([(1.0, y[1][1], y[1][2], y[1][3])] if len(y) == 3 else y) for (a,y) in x.items()} for (s,x) in env.unwrapped.P.items()}
     action_space = list(range(env.action_space.n))
 
-    epsilon = 0.5
-    episode_number = 0
-    learn_number = 0
-    lambda_ = 0.9
+    epsilon = 0.3
+    learning_rate = 0.6
+    episodes_per_update = 1
 
-    qlearner = Table()
-    learner = TDlambda(epsilon, action_space, qlearner, lambda_=lambda_)
+    q = Approximator_Table(action_space)
+    for learn_iteration in itertools.count():
+        policy = Policy_EpsilonGreedy(q, epsilon)
+        episodes = (rollout(policy, env) for _ in range(episodes_per_update))
+        targets = TD0_targets(episodes, q)
+        q.learn(learning_rate, targets)
 
-    print(f"epsilon: {epsilon}")
-    for i in itertools.count():
-        epsilon *= 0.9999
+        if learn_iteration % 1 == 0:
+            greedy_policy = Policy_Greedy(q)
+            reward_sum = test_policy(greedy_policy, env)
+            print(f"Episode {learn_iteration}: {reward_sum}")
 
-        episode_batch_size = 1
-        episode_number += episode_batch_size
-        policy = learner.make_policy()
-        episodes = (rollout(policy, env) for _ in range(episode_batch_size))
-        learner.learn(episodes)
-
-        if i % 1000 == 0:
-            greedy_policy = learner.make_policy_greedy()
-            print(f"Episode {episode_number}")
-            reward = test_policy(greedy_policy, env)
-            print(reward)
-            if reward > 100:
-                print("Sucess!!!! o<:)~")
-                return
 
 if __name__ == '__main__':
     runner()
