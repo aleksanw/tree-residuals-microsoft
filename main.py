@@ -110,11 +110,12 @@ def TD0_targets(episodes, q):
 
 
 def rollout(policy, env):
-    state = env.reset()
+    state = np.array(env.reset()).flatten()
     done = False
     while not done:
         action = policy(state)
         newstate, reward, done, _ = env.step(action)
+        newstate = np.array(newstate).flatten()
         yield state, action, reward, newstate
         state = newstate
 
@@ -130,40 +131,22 @@ def test_policy(policy, env):
     return np.average([test_rollout(policy, env) for _ in range(10)])
 
 
-def feature_engineered(env):
-    def agumented_state(state):
-        x = state % 5
-        y = state // 5
-        features = (x,y)
-        return features
-
-    class agumented_env:
-        def reset(self):
-            return agumented_state(env.reset())
-        def step(self, action):
-            newstate, reward, done, info = env.step(action)
-            return (agumented_state(newstate), reward, done, info)
-
-    return agumented_env()
-
-
 def runner():
-    env = gym.make('CorridorSmall-v5')
-    #env.unwrapped.P = {s:{a:([(1.0, y[1][1], y[1][2], y[1][3])] if len(y) == 3 else y) for (a,y) in x.items()} for (s,x) in env.unwrapped.P.items()}
+    env = gym.make('NChain-v0')
     action_space = list(range(env.action_space.n))
 
     epsilon = 0.3
     learning_rate = 0.6
     episodes_per_update = 1
 
-    q = Approximator_Table(action_space)
+    q = Approximator_ResidualBoosting(action_space)
     for learn_iteration in itertools.count():
         policy = Policy_EpsilonGreedy(q, epsilon)
         episodes = (rollout(policy, env) for _ in range(episodes_per_update))
         targets = TD0_targets(episodes, q)
         q.learn(learning_rate, targets)
 
-        if learn_iteration % 1 == 0:
+        if learn_iteration % 10 == 0:
             greedy_policy = Policy_Greedy(q)
             reward_sum = test_policy(greedy_policy, env)
             print(f"Episode {learn_iteration}: {reward_sum}")
