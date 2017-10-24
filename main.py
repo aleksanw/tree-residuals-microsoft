@@ -50,7 +50,7 @@ class Approximator_ResidualBoosting:
             return
 
         h = self.tree_regressor.fit(xs, ys)
-        self.trees.append(lambda x: learning_rate*h.predict(x))
+        self.trees.append(lambda x: learning_rate*h.predict((x,)))
 
     # TODO? memorize
     def __call__(self, arg):
@@ -110,13 +110,13 @@ def TD0_targets(episodes, q):
 
 
 def rollout(policy, env):
-    state = (env.reset(),)
+    state = env.reset()
     done = False
     while not done:
         action = policy(state)
         newstate, reward, done, _ = env.step(action)
-        yield state, action, reward, (newstate,)
-        state = (newstate,)
+        yield state, action, reward, newstate
+        state = newstate
 
 
 def test_rollout(policy, env):
@@ -128,6 +128,23 @@ def test_rollout(policy, env):
 
 def test_policy(policy, env):
     return np.average([test_rollout(policy, env) for _ in range(10)])
+
+
+def feature_engineered(env):
+    def agumented_state(state):
+        x = state % 5
+        y = state // 5
+        features = (x,y)
+        return features
+
+    class agumented_env:
+        def reset(self):
+            return agumented_state(env.reset())
+        def step(self, action):
+            newstate, reward, done, info = env.step(action)
+            return (agumented_state(newstate), reward, done, info)
+
+    return agumented_env()
 
 
 def runner():
