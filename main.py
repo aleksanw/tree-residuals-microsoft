@@ -33,28 +33,62 @@ class Approximator_Table:
 
 
 class Approximator_ResidualBoosting:
-
+    """Gradient boosted trees approximator.
+    Features may be vectors or scalars.  Value is scalar.
+    """
     def __init__(self, action_space):
-        self.trees = []
-        self.tree_regressor = sklearn.tree.DecisionTreeRegressor(max_depth=2)
         self.action_space = action_space
+        self.fit_tree = sklearn.tree.DecisionTreeRegressor(max_depth=2).fit
+        self.approximators = []
+        self.learning_rates = []
 
-    def learn(self, learning_rate, targets):
-        """Update approximator.
+    def learn(self, learning_rate, X, Y_target):
+        """Update approximator, correcting `learning_rate` of the error.
+
+        Parameters
+        ----------
+        learning_rate : weight of 
+        X : sequence of scalars or vectors -- features
+        Y_target : sequence of scalars -- target values corresponding to features in X
         """
-        residuals = [(x, (y - self(x))) for (x, y) in targets]
-        xs, ys = zip(*residuals)
+        X = np.asarray(X)
+        Y_target = np.asarray(Y_target)
 
-        # No value in keeping all-zero trees
-        if not any(ys):
-            return
+        # Allow scalar features.
+        if len(X.shape) == 1:
+            X.shape = (-1, 1)
 
-        h = self.tree_regressor.fit(xs, ys)
-        self.trees.append(lambda x: learning_rate*h.predict((x,)))
+        Y_error = Y_target - self(X)
+        h = self.fit_tree(X, Y_error).predict
 
-    # TODO? memorize
-    def __call__(self, arg):
-        return sum(tree(arg) for tree in self.trees)
+        # As in Microsoft's paper, apply learning_rate after fitting.
+        #     h = lambda X: learning_rate*h(X)
+        # Avoid expensive lambdas by instead applying learning rate on
+        # evaluation.  Save learning_rate for this purpose.
+        self.learning_rates.append(learning_rate)
+
+        # Sidenote: It should be more or less equivalent to apply the learning
+        # rate to the residuals before fitting, saving on storage and computation.
+
+        self.approximators.append(h)
+
+    def __call__(self, X):
+        """Evaluate approximator at each x in X.
+
+        Parameters
+        ----------
+        X : sequence of scalars or vectors -- features
+
+        Returns
+        -------
+        numpy array of approximated values
+        """
+        # Approximators do not yet have learning rates applied.  Do that during
+        # summation.
+        sum_ = np.zeros(len(X))
+        for lr, h in zip(self.learning_rates, self.approximators):
+            sum_ += lr * h(X)
+        return sum_
 
 
 class Policy_EpsilonGreedy:
