@@ -4,7 +4,7 @@ import numpy as np
 import random
 import itertools
 
-import corridor
+#import corridor
 
 # Used under development
 import sys
@@ -80,6 +80,18 @@ class Policy_Greedy:
         random.shuffle(self.q.action_space)
         return max(self.q.action_space, key=lambda x: self.q((*state,x)))
 
+class Deterministic:
+    def __init__(self, actions, q):
+        self.q = q
+        self.step = 0
+
+    def __call__(self, state):
+        """Get the next action in the sequence
+        """
+        action = self.q[self.step]
+        self.step = (self.step+1) % len(self.q)
+        return action
+
 
 def TDinf_targets(episodes, q):
     """Generate td_targets (TDinf).
@@ -99,6 +111,34 @@ def TDinf_targets(episodes, q):
 
 def v(q, state):
     return max(q((*state, x)) for x in q.action_space)
+
+class Human_Policy:
+    """Perform a deterministic sequence of actions chosen by a human.
+    """
+    def __init__(self, actions, q):
+        self.actions = actions
+        self.q = q
+        self.action_sequence = []
+        self.step = 0
+        self._file_to_sequence("sequence.txt")
+
+    def _file_to_sequence(self, filename):
+        with open(filename) as f:
+            for line in f:
+                self.action_sequence.append(int(line.strip()))
+                print(line)
+
+    def td_target(self, reward, newstate):
+        pass
+
+    def learn(self, episodes):
+        pass
+
+    def make_policy(self):
+        return Deterministic(self.actions, self.action_sequence)
+
+    def make_policy_greedy(self):
+        return Deterministic(self.actions, self.action_sequence)
 
 
 def TD0_targets(episodes, q):
@@ -149,7 +189,7 @@ def runner():
         if learn_iteration % 10 == 0:
             greedy_policy = Policy_Greedy(q)
             reward_sum = test_policy(greedy_policy, env)
-            print(f"Episode {learn_iteration}: {reward_sum}")
+            print(f"Episode {learn_iteration}".format(learn_iteration))
 
 
 if __name__ == '__main__':
