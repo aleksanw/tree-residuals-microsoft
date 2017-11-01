@@ -14,23 +14,42 @@ from pprint import pprint
 
 class Approximator_Table:
     def __init__(self, action_space):
-        self.table = {}
         self.action_space = action_space
+        self.table = {}
 
-    def apply_learning_rate(self, learning_rate, targets):
-        for x,y in targets:
-            yield x, learning_rate*y + (1-learning_rate)*self(x)
+    def learn(self, learning_rate, X, Y_target):
+        """Update approximator, correcting `learning_rate` of the error.
 
-    def learn(self, learning_rate, targets):
+        Parameters
+        ----------
+        learning_rate : weight of 
+        X : sequence of scalars or vectors -- features
+        Y_target : sequence of scalars -- target values corresponding to features in X
         """
-        updates: ((arg, val), ...)
-        arg must be hashable
+        # Coerce scalars to 1-dim vectors
+        X = np.reshape(X, (-1,1))
+
+        Y = self(X)
+        Y_target = np.asarray(Y_target)
+        Y_update = learning_rate*Y_target + (1-learning_rate)*Y
+
+        self.table.update(zip(map(tuple, X), Y_update))
+
+    def __call__(self, X):
+        """Evaluate approximator at each x in X.
+
+        Parameters
+        ----------
+        X : sequence of scalars or vectors -- features
+
+        Returns
+        -------
+        numpy array of approximated values
         """
-        self.table.update(self.apply_learning_rate(learning_rate, targets))
-
-    def __call__(self, arg):
-        return self.table.get(arg, 0.0)
-
+        # Coerce scalars to 1-dim vectors
+        X = np.reshape(X, (-1,1))
+        return np.fromiter((self.table.get(tuple(x), 0.0) for x in X),
+                            np.float64, count=len(X))
 
 class Approximator_ResidualBoosting:
     """Gradient boosted trees approximator.
