@@ -33,7 +33,6 @@ class Approximator_Table:
 
 
 class Approximator_ResidualBoosting:
-
     def __init__(self, action_space):
         self.trees = []
         self.tree_regressor = sklearn.tree.DecisionTreeRegressor(max_depth=2)
@@ -44,10 +43,9 @@ class Approximator_ResidualBoosting:
         """
         residuals = [(x, (y - self(x))) for (x, y) in targets]
         xs, ys = zip(*residuals)
-
         # No value in keeping all-zero trees
-        if not any(ys):
-            return
+        #if not any(ys):
+        #    return
 
         h = self.tree_regressor.fit(xs, ys)
         self.trees.append(lambda x: learning_rate*h.predict((x,)))
@@ -80,17 +78,25 @@ class Policy_Greedy:
         random.shuffle(self.q.action_space)
         return max(self.q.action_space, key=lambda x: self.q((*state,x)))
 
-class Deterministic:
-    def __init__(self, actions, q):
+
+class Policy_Deterministic:
+    def __init__(self, q):
         self.q = q
+        self.action_sequence = []
         self.step = 0
+        self._file_to_sequence("sequence.txt")
 
     def __call__(self, state):
         """Get the next action in the sequence
         """
-        action = self.q[self.step]
-        self.step = (self.step+1) % len(self.q)
+        action = self.action_sequence[self.step]
+        self.step = (self.step+1) % len(self.action_sequence)
         return action
+
+    def _file_to_sequence(self, filename):
+        with open(filename) as f:
+            for line in f:
+                self.action_sequence.append(int(line.strip()))
 
 
 def TDinf_targets(episodes, q):
@@ -106,39 +112,11 @@ def TDinf_targets(episodes, q):
         td_target = 0.0  # assuming episode is a full rollout
         for state, action, reward, _ in episode[::-1]:
             td_target = reward + discount*td_target
-            yield ((*state, action), td_target)
+            yield ((com*state, action), td_target)
 
 
 def v(q, state):
     return max(q((*state, x)) for x in q.action_space)
-
-class Human_Policy:
-    """Perform a deterministic sequence of actions chosen by a human.
-    """
-    def __init__(self, actions, q):
-        self.actions = actions
-        self.q = q
-        self.action_sequence = []
-        self.step = 0
-        self._file_to_sequence("sequence.txt")
-
-    def _file_to_sequence(self, filename):
-        with open(filename) as f:
-            for line in f:
-                self.action_sequence.append(int(line.strip()))
-                print(line)
-
-    def td_target(self, reward, newstate):
-        pass
-
-    def learn(self, episodes):
-        pass
-
-    def make_policy(self):
-        return Deterministic(self.actions, self.action_sequence)
-
-    def make_policy_greedy(self):
-        return Deterministic(self.actions, self.action_sequence)
 
 
 def TD0_targets(episodes, q):
@@ -170,27 +148,32 @@ def test_rollout(policy, env):
 def test_policy(policy, env):
     return np.average([test_rollout(policy, env) for _ in range(10)])
 
+def decay(initial, t):
+    return initial/(1 + 0.04*t)
 
 def runner():
     env = gym.make('NChain-v0')
     action_space = list(range(env.action_space.n))
 
-    epsilon = 0.3
-    learning_rate = 0.6
-    episodes_per_update = 1
+    initial_learning_rate = learning_rate = 0.15
+    initial_epsilon = epsilon = 0.4
+    episodes_per_update = 10
 
     q = Approximator_ResidualBoosting(action_space)
     for learn_iteration in itertools.count():
+        learning_rate = decay(initial_learning_rate, learn_iteration)
+        epsilon = decay(initial_epsilon, learn_iteration)
         policy = Policy_EpsilonGreedy(q, epsilon)
         episodes = (rollout(policy, env) for _ in range(episodes_per_update))
         targets = TD0_targets(episodes, q)
         q.learn(learning_rate, targets)
 
-        if learn_iteration % 10 == 0:
+        if learn_iteration % 1 == 0:
             greedy_policy = Policy_Greedy(q)
             reward_sum = test_policy(greedy_policy, env)
-            print(f"Episode {learn_iteration}".format(learn_iteration))
-
+            #n_trees = len(q.trees)
+            #print(f"Episode {learn_iteration} RewardSum {reward_sum} Ntrees {n_trees}".format(learn_iteration, reward_sum, n_trees))
+            print(f"Episode {learn_iteration} RewardSum {reward_sum} lr {learning_rate} epsilon {epsilon}".format(learn_iteration, reward_sum, learning_rate, epsilon))
 
 if __name__ == '__main__':
     runner()
