@@ -12,47 +12,118 @@ from time import sleep
 from pprint import pprint
 
 
+def assert_shapetype(array, dtype, shape):
+    array = np.asarray(array)
+    assert (array.dtype == dtype
+            and len(array.shape) == len(shape)
+            and all(array.shape[i] == shape[i] for i in range(len(shape)) if shape[i] != -1)
+            ), f"Shapetype mismatch: Expected {dtype}{shape}, Got {array.dtype}{array.shape}."
+
+
 class Approximator_Table:
     def __init__(self, action_space):
-        self.table = {}
         self.action_space = action_space
+        self.table = {}
 
-    def apply_learning_rate(self, learning_rate, targets):
-        for x,y in targets:
-            yield x, learning_rate*y + (1-learning_rate)*self(x)
+    def learn(self, learning_rate, X, Y_target):
+        """Update approximator, correcting `learning_rate` of the error.
 
-    def learn(self, learning_rate, targets):
+        Parameters
+        ----------
+        learning_rate : weight of 
+        X : sequence of scalars or vectors -- features
+        Y_target : sequence of scalars -- target values corresponding to features in X
         """
-        updates: ((arg, val), ...)
-        arg must be hashable
+        # Coerce scalars to 1-dim vectors
+        X = np.reshape(X, (-1,1))
+
+        Y = self(X)
+        Y_target = np.asarray(Y_target)
+        Y_update = learning_rate*Y_target + (1-learning_rate)*Y
+
+        self.table.update(zip(map(tuple, X), Y_update))
+
+    def __call__(self, X):
+        """Evaluate approximator at each x in X.
+
+        Parameters
+        ----------
+        X : sequence of scalars or vectors -- features
+
+        Returns
+        -------
+        numpy array of approximated values
         """
-        self.table.update(self.apply_learning_rate(learning_rate, targets))
-
-    def __call__(self, arg):
-        return self.table.get(arg, 0.0)
-
+        # Coerce scalars to 1-dim vectors
+        X = np.reshape(X, (-1,1))
+        return np.fromiter((self.table.get(tuple(x), 0.0) for x in X),
+                            np.float64, count=len(X))
 
 class Approximator_ResidualBoosting:
+    """Gradient boosted trees approximator.
+    Features may be vectors or scalars.  Value is scalar.
+    TODO: Require features to be vectors.  Makes for easier debugging.
+    """
     def __init__(self, action_space):
-        self.trees = []
-        self.tree_regressor = sklearn.tree.DecisionTreeRegressor(max_depth=2)
         self.action_space = action_space
+        self.fit_tree = sklearn.tree.DecisionTreeRegressor(max_depth=2).fit
+        self.approximators = []
+        self.learning_rates = []
 
-    def learn(self, learning_rate, targets):
-        """Update approximator.
+    def learn(self, learning_rate, X, Y_target):
+        """Update approximator, correcting `learning_rate` of the error.
+
+        Parameters
+        ----------
+        learning_rate : weight of 
+        X : sequence of scalars or vectors -- features
+        Y_target : sequence of scalars -- target values corresponding to features in X
         """
-        residuals = [(x, (y - self(x))) for (x, y) in targets]
-        xs, ys = zip(*residuals)
-        # No value in keeping all-zero trees
-        #if not any(ys):
-        #    return
+        assert_shapetype(X, 'int64', (-1,-1))
+        assert_shapetype(Y_target, 'float64', (-1,1))
 
-        h = self.tree_regressor.fit(xs, ys)
-        self.trees.append(lambda x: learning_rate*h.predict((x,)))
+        X = np.asarray(X)
+        Y_target = np.asarray(Y_target)
 
-    # TODO? memorize
-    def __call__(self, arg):
-        return sum(tree(arg) for tree in self.trees)
+        # Allow scalar features.
+        if len(X.shape) == 1:
+            X.shape = (-1, 1)
+
+        Y_error = Y_target - self(X)
+        h = self.fit_tree(X, Y_error).predict
+
+        # As in Microsoft's paper, apply learning_rate after fitting.
+        #     h = lambda X: learning_rate*h(X)
+        # Avoid expensive lambdas by instead applying learning rate on
+        # evaluation.  Save learning_rate for this purpose.
+        self.learning_rates.append(learning_rate)
+
+        # Sidenote: It should be more or less equivalent to apply the learning
+        # rate to the residuals before fitting, saving on storage and computation.
+
+        self.approximators.append(h)
+
+    def __call__(self, X):
+        """Evaluate approximator at each x in X.
+
+        Parameters
+        ----------
+        X : sequence of scalars or vectors -- features
+
+        Returns
+        -------
+        numpy array of approximated values
+        """
+        assert_shapetype(X, 'int64', (-1,-1))
+        # Approximators do not yet have learning rates applied.  Do that during
+        # summation.
+        sum_ = np.zeros((len(X),1))
+        for lr, h in zip(self.learning_rates, self.approximators):
+            Y = h(X).reshape(-1,1)
+            sum_ += lr * Y
+
+        assert_shapetype(sum_, 'float64', (-1,1))
+        return sum_
 
 
 class Policy_EpsilonGreedy:
@@ -75,8 +146,11 @@ class Policy_Greedy:
     def __call__(self, state):
         """Get most promising action.
         """
-        random.shuffle(self.q.action_space)
-        return max(self.q.action_space, key=lambda x: self.q((*state,x)))
+        X = [(*state, action) for action in self.q.action_space]
+        random.shuffle(X)
+        assert_shapetype(X, 'int64', (-1,-1))
+        action = X[self.q(X).argmax()][1]
+        return action
 
 
 class Policy_Deterministic:
@@ -116,7 +190,7 @@ def TDinf_targets(episodes, q):
 
 
 def v(q, state):
-    return max(q((*state, x)) for x in q.action_space)
+    return max(q(((*state, x),))[0] for x in q.action_space)
 
 
 def TD0_targets(episodes, q):
@@ -164,9 +238,12 @@ def runner():
         learning_rate = decay(initial_learning_rate, learn_iteration)
         epsilon = decay(initial_epsilon, learn_iteration)
         policy = Policy_EpsilonGreedy(q, epsilon)
-        episodes = (rollout(policy, env) for _ in range(episodes_per_update))
-        targets = TD0_targets(episodes, q)
-        q.learn(learning_rate, targets)
+        episodes = [list(rollout(policy, env)) for _ in range(episodes_per_update)]
+        targets = list(TD0_targets(episodes, q))
+        X, Y_target = zip(*targets)
+        assert_shapetype(X, 'int64', (-1,-1))
+        assert_shapetype(Y_target, 'float64', (-1,1))
+        q.learn(learning_rate, X, Y_target)
 
         if learn_iteration % 1 == 0:
             greedy_policy = Policy_Greedy(q)
