@@ -12,6 +12,14 @@ from time import sleep
 from pprint import pprint
 
 
+def assert_shapetype(array, dtype, shape):
+    array = np.asarray(array)
+    assert (array.dtype == dtype
+            and len(array.shape) == len(shape)
+            and all(array.shape[i] == shape[i] for i in range(len(shape)) if shape[i] != -1)
+            ), f"Shapetype mismatch: Expected {dtype}{shape}, Got {array.dtype}{array.shape}."
+
+
 class Approximator_Table:
     def __init__(self, action_space):
         self.action_space = action_space
@@ -54,6 +62,7 @@ class Approximator_Table:
 class Approximator_ResidualBoosting:
     """Gradient boosted trees approximator.
     Features may be vectors or scalars.  Value is scalar.
+    TODO: Require features to be vectors.  Makes for easier debugging.
     """
     def __init__(self, action_space):
         self.action_space = action_space
@@ -70,6 +79,9 @@ class Approximator_ResidualBoosting:
         X : sequence of scalars or vectors -- features
         Y_target : sequence of scalars -- target values corresponding to features in X
         """
+        assert_shapetype(X, 'int64', (-1,-1))
+        assert_shapetype(Y_target, 'float64', (-1,1))
+
         X = np.asarray(X)
         Y_target = np.asarray(Y_target)
 
@@ -102,11 +114,15 @@ class Approximator_ResidualBoosting:
         -------
         numpy array of approximated values
         """
+        assert_shapetype(X, 'int64', (-1,-1))
         # Approximators do not yet have learning rates applied.  Do that during
         # summation.
-        sum_ = np.zeros(len(X))
+        sum_ = np.zeros((len(X),1))
         for lr, h in zip(self.learning_rates, self.approximators):
-            sum_ += lr * h(X)
+            Y = h(X).reshape(-1,1)
+            sum_ += lr * Y
+
+        assert_shapetype(sum_, 'float64', (-1,1))
         return sum_
 
 
@@ -130,8 +146,11 @@ class Policy_Greedy:
     def __call__(self, state):
         """Get most promising action.
         """
-        random.shuffle(self.q.action_space)
-        return max(self.q.action_space, key=lambda x: self.q((*state,x)))
+        X = [(*state, action) for action in self.q.action_space]
+        random.shuffle(X)
+        assert_shapetype(X, 'int64', (-1,-1))
+        action = X[self.q(X).argmax()][1]
+        return action
 
 
 def TDinf_targets(episodes, q):
@@ -151,7 +170,7 @@ def TDinf_targets(episodes, q):
 
 
 def v(q, state):
-    return max(q((*state, x)) for x in q.action_space)
+    return max(q(((*state, x),))[0] for x in q.action_space)
 
 
 def TD0_targets(episodes, q):
@@ -195,9 +214,12 @@ def runner():
     q = Approximator_ResidualBoosting(action_space)
     for learn_iteration in itertools.count():
         policy = Policy_EpsilonGreedy(q, epsilon)
-        episodes = (rollout(policy, env) for _ in range(episodes_per_update))
-        targets = TD0_targets(episodes, q)
-        q.learn(learning_rate, targets)
+        episodes = [list(rollout(policy, env)) for _ in range(episodes_per_update)]
+        targets = list(TD0_targets(episodes, q))
+        X, Y_target = zip(*targets)
+        assert_shapetype(X, 'int64', (-1,-1))
+        assert_shapetype(Y_target, 'float64', (-1,1))
+        q.learn(learning_rate, X, Y_target)
 
         if learn_iteration % 10 == 0:
             greedy_policy = Policy_Greedy(q)
