@@ -89,7 +89,7 @@ class Approximator_ResidualBoosting:
         if len(X.shape) == 1:
             X.shape = (-1, 1)
 
-        Y_error = Y_target - self(X)
+        Y_error = abs((self(X) + Y_target))
         h = self.fit_tree(X, Y_error).predict
 
         # As in Microsoft's paper, apply learning_rate after fitting.
@@ -149,7 +149,7 @@ class Policy_Greedy:
         X = [(*state, action) for action in self.q.action_space]
         random.shuffle(X)
         assert_shapetype(X, 'int64', (-1,-1))
-        action = X[self.q(X).argmax()][1]
+        action = X[self.q(X).argmax()][-1]
         return action
 
 
@@ -220,10 +220,13 @@ def test_rollout(policy, env):
 
 
 def test_policy(policy, env):
-    return np.average([test_rollout(policy, env) for _ in range(10)])
+    return np.average([test_rollout(policy, env) for _ in range(20)])
 
 def decay(initial, t):
+    '''Decay variables according to microsoft paper
+    '''
     return initial/(1 + 0.04*t)
+
 
 def runner():
     env = gym.make('NChain-v0')
@@ -231,7 +234,7 @@ def runner():
 
     initial_learning_rate = learning_rate = 0.15
     initial_epsilon = epsilon = 0.4
-    episodes_per_update = 10
+    episodes_per_update = 1
 
     q = Approximator_ResidualBoosting(action_space)
     for learn_iteration in itertools.count():
@@ -240,17 +243,25 @@ def runner():
         policy = Policy_EpsilonGreedy(q, epsilon)
         episodes = [list(rollout(policy, env)) for _ in range(episodes_per_update)]
         targets = list(TD0_targets(episodes, q))
+
+        # Checking if residuals are OK
         X, Y_target = zip(*targets)
+
+        X_ = np.asarray(X)
+        Y_target_ = np.asarray(Y_target)
+        Y_error_before = sum(Y_target_ - q(X_))
+
         assert_shapetype(X, 'int64', (-1,-1))
         assert_shapetype(Y_target, 'float64', (-1,1))
         q.learn(learning_rate, X, Y_target)
 
+        Y_error_after = sum(Y_target - q(X))
+
         if learn_iteration % 1 == 0:
             greedy_policy = Policy_Greedy(q)
             reward_sum = test_policy(greedy_policy, env)
-            #n_trees = len(q.trees)
-            #print(f"Episode {learn_iteration} RewardSum {reward_sum} Ntrees {n_trees}".format(learn_iteration, reward_sum, n_trees))
-            print(f"Episode {learn_iteration} RewardSum {reward_sum} lr {learning_rate} epsilon {epsilon}".format(learn_iteration, reward_sum, learning_rate, epsilon))
+            n_trees = len(q.approximators)
+            print(f"Episode {learn_iteration} RewardSum {reward_sum} lr {learning_rate:.5f} epsilon {epsilon:.5f} n_trees {n_trees} errorBefore {Y_error_before} errorAfter {Y_error_after}")
 
 if __name__ == '__main__':
     runner()
