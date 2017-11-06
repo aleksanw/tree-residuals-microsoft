@@ -1,9 +1,9 @@
 # Backlog
  - ✓ Vectorize
  - Run human policy with complete data
- ✓ Decay learning rate 
+ - ✓ Decay learning rate 
  - IAUU
- ✓ Batches 
+ - ✓ Batches 
  - Sliding window
  - Retrain every n'th episode
  - Check if residuals actually make sense
