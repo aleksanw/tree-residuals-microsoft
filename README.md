@@ -1,5 +1,5 @@
 # Backlog
- ✓ Vectorize
+ - ✓ Vectorize
  - Run human policy with complete data
  ✓ Decay learning rate 
  - IAUU
