@@ -4,20 +4,15 @@ import numpy as np
 import random
 import itertools
 
-#import corridor
+import corridor
+
+from utils import rollout,test_rollout, test_policy, decay, assert_shapetype, v
+from policy import Policy_EpsilonGreedy, Policy_Greedy, Policy_Deterministic
 
 # Used under development
 import sys
 from time import sleep
 from pprint import pprint
-
-
-def assert_shapetype(array, dtype, shape):
-    array = np.asarray(array)
-    assert (array.dtype == dtype
-            and len(array.shape) == len(shape)
-            and all(array.shape[i] == shape[i] for i in range(len(shape)) if shape[i] != -1)
-            ), f"Shapetype mismatch: Expected {dtype}{shape}, Got {array.dtype}{array.shape}."
 
 
 class Approximator_Table:
@@ -126,53 +121,6 @@ class Approximator_ResidualBoosting:
         return sum_
 
 
-class Policy_EpsilonGreedy:
-    def __init__(self, q, epsilon):
-        self.q = q
-        self.epsilon = epsilon
-        self.greedy = Policy_Greedy(q)
-
-    def __call__(self, state):
-        if random.random() < self.epsilon:
-            return random.choice(self.q.action_space)
-        else:
-            return self.greedy(state)
-
-
-class Policy_Greedy:
-    def __init__(self, q):
-        self.q = q
-
-    def __call__(self, state):
-        """Get most promising action.
-        """
-        X = [(*state, action) for action in self.q.action_space]
-        random.shuffle(X)
-        assert_shapetype(X, 'int64', (-1,-1))
-        action = X[self.q(X).argmax()][-1]
-        return action
-
-
-class Policy_Deterministic:
-    def __init__(self, q):
-        self.q = q
-        self.action_sequence = []
-        self.step = 0
-        self._file_to_sequence("sequence.txt")
-
-    def __call__(self, state):
-        """Get the next action in the sequence
-        """
-        action = self.action_sequence[self.step]
-        self.step = (self.step+1) % len(self.action_sequence)
-        return action
-
-    def _file_to_sequence(self, filename):
-        with open(filename) as f:
-            for line in f:
-                self.action_sequence.append(int(line.strip()))
-
-
 def TDinf_targets(episodes, q):
     """Generate td_targets (TDinf).
     episodes = (episode, ..)
@@ -189,43 +137,12 @@ def TDinf_targets(episodes, q):
             yield ((com*state, action), td_target)
 
 
-def v(q, state):
-    return max(q(((*state, x),))[0] for x in q.action_space)
-
-
 def TD0_targets(episodes, q):
     discount = 0.95
     for episode in episodes:
         for state, action, reward, newstate in episode:
             td_target = reward + discount*v(q, newstate)
             yield ((*state, action), td_target)
-
-
-def rollout(policy, env):
-    state = np.array(env.reset()).flatten()
-    done = False
-    while not done:
-        action = policy(state)
-        newstate, reward, done, _ = env.step(action)
-        newstate = np.array(newstate).flatten()
-        yield state, action, reward, newstate
-        state = newstate
-
-
-def test_rollout(policy, env):
-    reward_sum = 0
-    for (_, _, reward, _) in rollout(policy, env):
-        reward_sum += reward
-    return reward_sum
-
-
-def test_policy(policy, env):
-    return np.average([test_rollout(policy, env) for _ in range(20)])
-
-def decay(initial, t):
-    '''Decay variables according to microsoft paper
-    '''
-    return initial/(1 + 0.04*t)
 
 
 def runner():
@@ -249,15 +166,14 @@ def runner():
 
         X_ = np.asarray(X)
         Y_target_ = np.asarray(Y_target)
-        Y_error_before = sum(Y_target_ - q(X_))
 
         assert_shapetype(X, 'int64', (-1,-1))
         assert_shapetype(Y_target, 'float64', (-1,1))
         q.learn(learning_rate, X, Y_target)
 
-        Y_error_after = sum(Y_target - q(X))
-
         if learn_iteration % 1 == 0:
+            Y_error_before = sum(Y_target_ - q(X_))
+            Y_error_after = sum(Y_target - q(X))
             greedy_policy = Policy_Greedy(q)
             reward_sum = test_policy(greedy_policy, env)
             n_trees = len(q.approximators)
