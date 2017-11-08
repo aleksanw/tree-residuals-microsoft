@@ -94,8 +94,8 @@ class Approximator_ResidualBoosting:
         if len(X.shape) == 1:
             X.shape = (-1, 1)
 
-        Y_error = Y_target - self(X)
-        h = self.fit_tree(X, Y_error).predict
+        Y_residual = Y_target - self(X)
+        h = fit_tree(X, Y_residual).predict
 
         # As in Microsoft's paper, apply learning_rate after fitting.
         #     h = lambda X: learning_rate*h(X)
