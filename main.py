@@ -66,7 +66,6 @@ class Approximator_ResidualBoosting:
     """
     def __init__(self, action_space):
         self.action_space = action_space
-        self.fit_tree = sklearn.tree.DecisionTreeRegressor(max_depth=2).fit
         self.approximators = []
         self.learning_rates = []
 
@@ -81,6 +80,11 @@ class Approximator_ResidualBoosting:
         """
         assert_shapetype(X, 'int64', (-1,-1))
         assert_shapetype(Y_target, 'float64', (-1,1))
+
+        # This function is not pure at all.  The returned tree is owned by the
+        # Regressor and will be in-place replaced by future calls to fit.
+        # Instantiate a new Regressor for every fiting.
+        fit_tree = sklearn.tree.DecisionTreeRegressor(max_depth=1).fit
 
         X = np.asarray(X)
         Y_target = np.asarray(Y_target)
