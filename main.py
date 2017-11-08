@@ -45,29 +45,13 @@ def run():
     env.unwrapped.slip = 0  # nonslip env
     action_space = list(range(env.action_space.n))
 
-    # Generate episodes by just repeatedly applying the same action
-    loops = [
-            [0],
-            [1],
-            [0,1],
-            [0,0,1],
-            [0,0,0,1],
-            [0,0,0,0,1],
-            ]
-
-    episodes = []
-    for loop in loops:
-        episodes.append(list(rollout(Policy_ConstantActionLoop(loop), env)))
-
-
-    # Attempt to overfit targets
-    # Hopefully the approximator will still generalize to states it has not seen
     q = Approximator_ResidualBoosting(action_space)
     initial_learning_rate = 1.0
     learning_rate = initial_learning_rate
     for learning_iteration in range(100):
-        targets = list(TD0_targets(episodes, q))
-        targets = random.choices(targets, k=1000)
+        policy = Policy_EpsilonGreedy(q, epsilon=0.5)
+        episodes = [rollout(policy, env) for _ in range(10)]
+        targets = TD0_targets(episodes, q)
         X, Y_target = zip(*targets)
         Y_target = np.reshape(Y_target, (-1, 1))
 
