@@ -268,8 +268,8 @@ def run():
         learning_rate = decay(initial_learning_rate, learning_iteration)
         q.learn(learning_rate, X, Y_target)
 
-            greedy_policy = Policy_Greedy(q)
-            reward_sum = test_policy(greedy_policy, env)
+        greedy_policy = Policy_Greedy(q)
+        reward_sum = test_policy(greedy_policy, env)
         print(f"Episode {learning_iteration} RewardSum {reward_sum} lr {learning_rate}")
 
 
