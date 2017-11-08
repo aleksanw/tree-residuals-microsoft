@@ -59,6 +59,7 @@ class Approximator_Table:
         return np.fromiter((self.table.get(tuple(x), 0.0) for x in X),
                             np.float64, count=len(X))
 
+
 class Approximator_ResidualBoosting:
     """Gradient boosted trees approximator.
     Features may be vectors or scalars.  Value is scalar.
@@ -190,7 +191,7 @@ def TDinf_targets(episodes, q):
         td_target = 0.0  # assuming episode is a full rollout
         for state, action, reward, _ in episode[::-1]:
             td_target = reward + discount*td_target
-            yield ((com*state, action), td_target)
+            yield ((*state, action), td_target)
 
 
 def v(q, state):
@@ -225,6 +226,7 @@ def test_rollout(policy, env):
 
 def test_policy(policy, env):
     return np.average([test_rollout(policy, env) for _ in range(10)])
+
 
 def decay(initial, t):
     return initial/(1 + 0.04*t)
