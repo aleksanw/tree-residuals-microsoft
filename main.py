@@ -178,7 +178,7 @@ class Policy_Deterministic:
                 self.action_sequence.append(int(line.strip()))
 
 
-def TDinf_targets(episodes, q):
+def TDinf_targets(episodes):
     """Generate td_targets (TDinf).
     episodes = (episode, ..)
     episode = (state, action, reward, newstate)
