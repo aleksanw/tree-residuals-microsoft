@@ -231,6 +231,14 @@ def test_policy(policy, env):
 def decay(initial, t):
     return initial/(1 + 0.04*t)
 
+class Policy_ConstantActionLoop:
+    def __init__(self, actions):
+        self.actions = itertools.cycle(actions)
+
+    def __call__(self, state):
+        return self.actions.__next__()
+
+
 def runner():
     env = gym.make('NChain-v0')
     action_space = list(range(env.action_space.n))
