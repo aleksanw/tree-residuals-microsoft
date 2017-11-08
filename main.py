@@ -31,11 +31,9 @@ class Approximator_Table:
         Parameters
         ----------
         learning_rate : weight of 
-        X : sequence of scalars or vectors -- features
+        X : sequence of vectors -- features
         Y_target : sequence of scalars -- target values corresponding to features in X
         """
-        # Coerce scalars to 1-dim vectors
-        X = np.reshape(X, (-1,1))
 
         Y = self(X)
         Y_target = np.asarray(Y_target)
@@ -89,10 +87,6 @@ class Approximator_ResidualBoosting:
 
         X = np.asarray(X)
         Y_target = np.asarray(Y_target)
-
-        # Allow scalar features.
-        if len(X.shape) == 1:
-            X.shape = (-1, 1)
 
         Y_residual = Y_target - self(X)
         h = fit_tree(X, Y_residual).predict
