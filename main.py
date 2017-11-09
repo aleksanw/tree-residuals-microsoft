@@ -6,38 +6,15 @@ import itertools
 
 import corridor
 
-from utils import rollout,test_rollout, test_policy, decay, assert_shapetype, v
-from policy import Policy_ConstantActionLoop, Policy_EpsilonGreedy, Policy_Greedy, Policy_Deterministic
 from approximator import Approximator_Table, Approximator_ResidualBoosting
+from policy import Policy_ConstantActionLoop, Policy_EpsilonGreedy, Policy_Greedy, Policy_Deterministic
+from td import TD0_targets
+from utils import rollout,test_rollout, test_policy, decay, assert_shapetype, v
 
 # Used under development
 import sys
 from time import sleep
 from pprint import pprint
-
-
-def TDinf_targets(episodes):
-    """Generate td_targets (TDinf).
-    episodes = (episode, ..)
-    episode = (state, action, reward, newstate)
-    Events in episode must come in order. That is event[0].newstate == event[1].state.
-    """
-    discount = 0.95
-    for episode in episodes:
-        episode = list(episode)
-        # Work backwards and calculate td_targets
-        td_target = 0.0  # assuming episode is a full rollout
-        for state, action, reward, _ in episode[::-1]:
-            td_target = reward + discount*td_target
-            yield ((*state, action), td_target)
-
-
-def TD0_targets(episodes, q):
-    discount = 0.95
-    for episode in episodes:
-        for state, action, reward, newstate in episode:
-            td_target = reward + discount*v(q, newstate)
-            yield ((*state, action), td_target)
 
 
 def run():
