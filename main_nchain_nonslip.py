@@ -19,8 +19,6 @@ from pprint import pprint
 
 
 def run():
-    env = gym.make('NChain-v0')
-    env.unwrapped.slip = 0  # nonslip env
     action_space = list(range(env.action_space.n))
     replay_buffer = Replay_buffer()
 
@@ -44,5 +42,11 @@ def run():
         print(f"Episode {learning_iteration} RewardSum {reward_sum} lr {learning_rate}")
 
 
+def main():
+    env = gym.make('NChain-v0')
+    env.unwrapped.slip = 0  # nonslip env
+    run(env)
+
+
 if __name__ == '__main__':
-    run()
+    main()
