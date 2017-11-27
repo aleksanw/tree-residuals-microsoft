@@ -29,11 +29,11 @@ def run(env):
     replay_buffer = Replay_buffer()
 
     q = Approximator_ResidualBoosting(action_space)
-    initial_learning_rate = 0.15
+    initial_learning_rate = 0.50
     learning_rate = initial_learning_rate
-    initial_epsilon = 0.15
+    initial_epsilon = 0.30
     epsilon = initial_epsilon
-    batch_size = 10
+    batch_size = 1
 
     for learning_iteration in range(100):
         policy = Policy_EpsilonGreedy(q, epsilon=epsilon)
@@ -44,8 +44,8 @@ def run(env):
         X, Y_target = zip(*targets)
         Y_target = np.reshape(Y_target, (-1, 1))
 
-        learning_rate = decay(initial_learning_rate, learning_iteration)
-        epsilon = decay(initial_epsilon, learning_iteration)
+        learning_rate = decay(initial_learning_rate, learning_iteration*batch_size)
+        epsilon = decay(initial_epsilon, learning_iteration*batch_size)
         q.learn(learning_rate, X, Y_target)
 
         if learning_iteration % 1 == 0:
