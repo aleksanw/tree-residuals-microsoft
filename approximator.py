@@ -73,6 +73,10 @@ class Approximator_ResidualBoosting:
         Y_target = np.asarray(Y_target)
 
         Y_residual = Y_target - self(X)
+        # No sense in keeping null-residuals.  Null-residuals happen a lot in
+        # initial exploration when rewards are sparse.
+        if not Y_residual.any():
+            return
         h = fit_tree(X, Y_residual).predict
 
         # As in Microsoft's paper, apply learning_rate after fitting.
