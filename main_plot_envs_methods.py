@@ -1,3 +1,5 @@
+import os
+
 import corridor
 import gym
 
@@ -19,24 +21,43 @@ def nonslip_nchain():
 envs = [
     #('Nonslip nchain', nonslip_nchain),
     #('Blackjack', lambda: gym.make('Blackjack-v0')),
-    #nonslip_nchain,
-    lambda: gym.make('CorridorBig-v10'),
+    nonslip_nchain,
+    #lambda: gym.make('CorridorBig-v10'),
     ]
 
 
+def dropafter(predicate, iterable):
+    for x in iterable:
+        yield x
+        if predicate(x):
+            return
+
 def main():
     for make_env in envs:
-        #tree_run_result = tree_agent.run(make_env())
-        #pickle.dump(tree_run_result, open('tree_run.data', 'wb'))
-        #tree_run_result = pickle.load(open('tree_run.data', 'rb'))
-        dqn_run_result = dqn_agent.run(make_env())
-        #pickle.dump(dqn_run_result, open('dqn_run.data', 'wb'))
-        #dqn_run_result = pickle.load(open('dqn_run.data'
+        if os.path.isfile('tree_run.pickle'):
+            tree_run_result = pickle.load(open('tree_run.pickle', 'rb'))
+        else:
+            tree_run_result = tree_agent.run(make_env())
+            tree_run_result = list(dropafter(lambda x: x[1] == 9960, tree_run_result))
+            pickle.dump(tree_run_result, open('tree_run.pickle', 'wb'))
+
+        if os.path.isfile('dqn_run.pickle'):
+            dqn_run_result = pickle.load(open('dqn_run.pickle', 'rb'))
+        else:
+            dqn_run_result = dqn_agent.run(make_env())
+            dqn_run_result = list(dropafter(lambda x: x[1] == 9960, dqn_run_result))
+            pickle.dump(dqn_run_result, open('dqn_run.pickle', 'wb'))
+
         both_results = pd.DataFrame({
-             'Tree': pd.Series(tree_run_result[1], index=tree_run_result[0]),
-             'DQN': pd.Series(dqn_run_result[1], index=dqn_run_result[0]),
+             'Tree': pd.Series(dict(tree_run_result)),
+             'DQN': pd.Series(dict(dqn_run_result)),
              })
-        both_results.plot()
+
+        fig = plt.figure()
+        ax = fig.gca(xlabel='Interactions with environment',
+                     ylabel='Episode reward')
+        both_results.plot(ax=ax)
+        fig.tight_layout()
         plt.show()
 
 

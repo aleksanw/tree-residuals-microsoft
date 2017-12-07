@@ -26,7 +26,7 @@ def test_policy(policy, env):
 def decay(initial, t):
     '''Decay variables according to microsoft paper
     '''
-    return initial/(1 + 0.04*t)
+    return initial/(1 + 0.001*t)
 
 
 def assert_shapetype(array, dtype, shape):
