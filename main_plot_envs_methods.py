@@ -17,6 +17,12 @@ def nonslip_nchain():
     env.unwrapped.slip = 0  # nonslip env
     return env
 
+def nchain_microsoft():
+    env = gym.make('NChain-v0')
+    # Non-default reward for goal from Microsoft paper.
+    env.unwrapped.large = 100
+    return env
+
 
 envs = [
     #('Nonslip nchain', nonslip_nchain),
