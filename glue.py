@@ -77,7 +77,7 @@ def run(env):
     initial_epsilon = 0.90
     epsilon = initial_epsilon
     rollout_batch_size = 1
-    replay_batch_size = 50
+    replay_batch_size = 5
 
     interaction_count = 0
 

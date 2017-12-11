@@ -42,6 +42,20 @@ class Approximator_Table:
                             np.float64, count=len(X))
 
 
+class Approximator_ResidualBoostingAdvantage:
+    def __init__(self, action_space):
+        self.action_space = action_space
+        self.V = Approximator_ResidualBoosting(action_space)
+        self.A = Approximator_ResidualBoosting(action_space)
+
+    def learn(self, state, action, target):
+        self.V.update(state, target)
+        self.A.update((*state, action), target - self.V(state))
+
+    def __call__(self, state, action):
+        return V(state) + A((*state, action))
+
+
 class Approximator_ResidualBoosting:
     """Gradient boosted trees approximator.
     Features may be vectors or scalars.  Value is scalar.
@@ -61,13 +75,12 @@ class Approximator_ResidualBoosting:
         X : sequence of scalars or vectors -- features
         Y_target : sequence of scalars -- target values corresponding to features in X
         """
-        assert_shapetype(X, 'int64', (-1,-1))
         assert_shapetype(Y_target, 'float64', (-1,1))
 
         # This function is not pure at all.  The returned tree is owned by the
         # Regressor and will be in-place replaced by future calls to fit.
         # Instantiate a new Regressor for every fiting.
-        fit_tree = sklearn.tree.DecisionTreeRegressor(max_depth=2).fit
+        fit_tree = sklearn.tree.DecisionTreeRegressor(max_depth=4).fit
 
         X = np.asarray(X)
         Y_target = np.asarray(Y_target)
@@ -101,7 +114,6 @@ class Approximator_ResidualBoosting:
         -------
         numpy array of approximated values
         """
-        assert_shapetype(X, 'int64', (-1,-1))
         # Approximators do not yet have learning rates applied.  Do that during
         # summation.
         sum_ = np.zeros((len(X),1))

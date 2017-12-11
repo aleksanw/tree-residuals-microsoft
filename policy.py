@@ -55,6 +55,5 @@ class Policy_Greedy:
         """
         X = [(*state, action) for action in self.q.action_space]
         random.shuffle(X)
-        assert_shapetype(X, 'int64', (-1,-1))
         action = X[self.q(X).argmax()][-1]
         return action
