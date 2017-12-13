@@ -8,6 +8,7 @@ from policy import Policy_ConstantActionLoop, Policy_EpsilonGreedy, Policy_Greed
 from td import TD0_targets
 from utils import rollout,test_rollout, test_policy, decay, assert_shapetype, v
 from replay_buffer import Replay_buffer
+from autoencoder import train_on, latent_of, visualize_reconstruction
 
 # Used under development
 import sys
@@ -67,6 +68,9 @@ class PolicyPlotter:
 
         return X,Y,U,V
 
+def images_from_episodes(episodes):
+    return np.array([sars[0] for e in episodes for sars in e])
+
 def run(env):
     action_space = list(range(env.action_space.n))
     replay_buffer = Replay_buffer()
@@ -77,9 +81,10 @@ def run(env):
     initial_epsilon = 0.90
     epsilon = initial_epsilon
     rollout_batch_size = 1
-    replay_batch_size = 5
+    replay_batch_size = 1
 
     interaction_count = 0
+    encoder_iterations = 20
 
     plot_policy = hasattr(env.unwrapped, 'desc')
     if plot_policy:
@@ -100,6 +105,14 @@ def run(env):
         replay_buffer += episodes
         sampled_episodes = replay_buffer.sample(replay_batch_size)
         sampled_episodes = episodes
+        auto_episodes = images_from_episodes(sampled_episodes)
+
+        for i in range(encoder_iterations):
+            train_on(images_from_episodes(replay_buffer.sample(16)))
+            if i % 5 == 0:
+                visualize_reconstruction(images_from_episodes(replay_buffer.sample(5)), learning_iteration, i)
+
+
         targets = TD0_targets(sampled_episodes, q)
         X, Y_target = zip(*targets)
         Y_target = np.reshape(Y_target, (-1, 1))
