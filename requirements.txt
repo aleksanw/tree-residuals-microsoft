@@ -1,3 +1,13 @@
-gym
-scipy  # sklearn unstated dependency
+# Environments
+gym[atari]
+
+# Decision trees
 sklearn
+scipy  # missing dependency (sklearn)
+
+# Neural networks
+tensorflow
+
+# Plotting
+matplotlib
+pandas
