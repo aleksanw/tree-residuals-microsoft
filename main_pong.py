@@ -34,11 +34,14 @@ class Render(SimpleWrapper):
     def __init__(self, env):
         super().__init__(env)
         self._n = 0
+        self.fig = plt.figure()
+        self.fig.show()
 
     def _apply(self, I):
-        if self._n % 10 == 0:
-            self.env.render()
-        self._n += 1
+        ax = self.fig.gca()
+        ax.clear()
+        ax.imshow(np.reshape(I, (80,80)))
+        self.fig.canvas.draw()
         return I
 
 
