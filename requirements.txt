@@ -6,7 +6,7 @@ sklearn
 scipy  # missing dependency (sklearn)
 
 # Neural networks
-tensorflow
+tensorflow-gpu
 
 # Plotting
 matplotlib
