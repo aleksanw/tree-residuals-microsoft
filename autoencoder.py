@@ -27,10 +27,13 @@ from __future__ import division, print_function, absolute_import
 
 import tensorflow as tf
 import numpy as np
+import os
 import matplotlib.pyplot as plt
 
+from utils import decay
+
 # Training Parameters
-learning_rate = 0.01
+initial_learning_rate = learning_rate = 0.2
 
 display_step = 1000
 examples_to_show = 10
@@ -97,12 +100,17 @@ init = tf.global_variables_initializer()
 # Start a new TF session
 sess = tf.Session()
 
-
+iteration = 0
 def train_on(batch_x):
     """ Run optimization op (backprop) and cost op (to get loss value)
     """
+    global learning_rate
+    global iteration
+    learning_rate = decay(initial_learning_rate, iteration)
+    iteration += 10
+
     _, l = sess.run([optimizer, loss], feed_dict={X: batch_x})
-    print('Minibatch Loss: %f' % (l))
+    print(f'Minibatch Loss: {l} lr {learning_rate}')
 
 def latent_of(observation):
     """Return the latent representation according to the autoencoder
@@ -114,7 +122,8 @@ def make_data_dirs():
         os.mkdir('images')
         os.mkdir('images/reconstructed')
         os.mkdir('images/original')
-    except:
+    except Exception as e:
+        print(e) 
         # Directory is already there
         pass
 
@@ -126,7 +135,7 @@ def visualize_reconstruction(batch_x, learning_iteration, encoder_iteration):
     """Encode and decode observations from a game. Visualizes reconstructed and
     original for comparison
     """
-    n = 5
+    n = 1
     canvas_orig = np.empty((80 * n, 80 * n))
     canvas_recon = np.empty((80 * n, 80 * n))
     for i in range(n):
@@ -149,5 +158,5 @@ def visualize_reconstruction(batch_x, learning_iteration, encoder_iteration):
     plt.imsave(image_path, canvas_orig, origin="upper", cmap="jet")
 
     plt.figure(figsize=(n, n))
-    image_path = f"images/reconstructed/reconstructed_{learning_iteration:04d}_{encoder_iteration:02d}.png"
+    image_path = f"images/reconstructed/reconstructed_{learning_iteration:04d}_{encoder_iteration:07d}.png"
     plt.imsave(image_path, canvas_recon, origin="upper", cmap="jet")
