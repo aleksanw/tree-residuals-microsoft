@@ -10,6 +10,8 @@ import pandas as pd
 import glue as tree_agent
 import dqn as dqn_agent
 
+import autoencoder
+
 
 class SimpleWrapper(gym.Wrapper):
     def _reset(self):
@@ -32,6 +34,11 @@ class PongSimplify(SimpleWrapper):
         return I.astype(np.float).ravel()
 
 
+class LatentSpace(SimpleWrapper):
+    def _apply(self, I):
+        return autoencoder.latent_of(I)
+
+
 class Render(SimpleWrapper):
     def __init__(self, env):
         super().__init__(env)
@@ -50,6 +57,7 @@ class Render(SimpleWrapper):
 def main():
     env = gym.make('Pong-v0')
     env = PongSimplify(env)
+    env = LatentSpace(env)
     #env = Render(env)
     tree_run_result = tree_agent.run(env)
     list(tree_run_result)
