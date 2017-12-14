@@ -35,7 +35,15 @@ class PongSimplify(SimpleWrapper):
 
 
 class LatentSpace(SimpleWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        self.n = 0
+
     def _apply(self, I):
+        I = np.reshape(I, (1, -1))
+        autoencoder.train_on(I)
+        autoencoder.visualize_reconstruction(I, self.n, self.n)
+        self.n += 1
         return autoencoder.latent_of(I)
 
 

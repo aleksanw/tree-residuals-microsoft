@@ -8,7 +8,6 @@ from policy import Policy_ConstantActionLoop, Policy_EpsilonGreedy, Policy_Greed
 from td import TD0_targets
 from utils import rollout,test_rollout, test_policy, decay, assert_shapetype, v
 from replay_buffer import Replay_buffer
-from autoencoder import train_on, latent_of, visualize_reconstruction
 
 # Used under development
 import sys
@@ -105,13 +104,6 @@ def run(env):
         replay_buffer += episodes
         sampled_episodes = replay_buffer.sample(replay_batch_size)
         sampled_episodes = episodes
-        auto_episodes = images_from_episodes(sampled_episodes)
-
-        for i in range(encoder_iterations):
-            train_on(images_from_episodes(replay_buffer.sample(16)))
-            if i % 5 == 0:
-                visualize_reconstruction(images_from_episodes(replay_buffer.sample(5)), learning_iteration, i)
-
 
         targets = TD0_targets(sampled_episodes, q)
         X, Y_target = zip(*targets)

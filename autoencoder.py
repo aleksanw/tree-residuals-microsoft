@@ -33,14 +33,14 @@ import matplotlib.pyplot as plt
 from utils import decay
 
 # Training Parameters
-initial_learning_rate = learning_rate = 0.2
+initial_learning_rate = learning_rate = 0.9
 
 display_step = 1000
 examples_to_show = 10
 
 # Network Parameters
 num_hidden_1 = 256 # 1st layer num features
-num_hidden_2 = 128 # 2nd layer num features (the latent dim)
+num_hidden_2 = 4 # 2nd layer num features (the latent dim)
 num_input = 80*80 # Pong data input (img shape: 28*28)
 
 # tf Graph input (only pictures)
@@ -90,7 +90,7 @@ y_pred = decoder_op
 y_true = X
 
 # Define loss and optimizer, minimize the squared error
-loss = tf.reduce_mean(tf.pow(y_true - y_pred, 2))
+loss = tf.reduce_mean(tf.pow(y_true - y_pred, 8))
 optimizer = tf.train.RMSPropOptimizer(learning_rate).minimize(loss)
 
 # Initialize the variables (i.e. assign their default value)
@@ -107,7 +107,7 @@ def train_on(batch_x):
     global learning_rate
     global iteration
     learning_rate = decay(initial_learning_rate, iteration)
-    iteration += 10
+    iteration += 1
 
     _, l = sess.run([optimizer, loss], feed_dict={X: batch_x})
     print(f'Minibatch Loss: {l} lr {learning_rate}')
@@ -155,8 +155,8 @@ def visualize_reconstruction(batch_x, learning_iteration, encoder_iteration):
 
     plt.figure(figsize=(n, n))
     image_path = f"images/original/original_{learning_iteration:04d}_{encoder_iteration:02d}.png"
-    plt.imsave(image_path, canvas_orig, origin="upper", cmap="jet")
+    plt.imsave(image_path, canvas_orig, origin="upper", cmap="Greys")
 
     plt.figure(figsize=(n, n))
     image_path = f"images/reconstructed/reconstructed_{learning_iteration:04d}_{encoder_iteration:07d}.png"
-    plt.imsave(image_path, canvas_recon, origin="upper", cmap="jet")
+    plt.imsave(image_path, canvas_recon, origin="upper", cmap="Greys")
