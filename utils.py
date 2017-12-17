@@ -25,10 +25,10 @@ def test_policy(policy, env):
     return np.average([test_rollout(policy, env) for _ in range(20)])
 
 
-def decay(initial, t):
+def decay(initial, t, decay=0.001):
     '''Decay variables according to microsoft paper
     '''
-    return initial/(1 + 0.001*t)
+    return initial/(1 + decay*t)
 
 
 def assert_shapetype(array, dtype, shape):
