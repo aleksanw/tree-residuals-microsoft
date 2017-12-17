@@ -9,8 +9,10 @@ import pandas as pd
 
 import glue as tree_agent
 import dqn as dqn_agent
-
 import autoencoder
+import replay_buffer
+
+from utils import make_data_dirs
 
 
 class SimpleWrapper(gym.Wrapper):
@@ -38,12 +40,21 @@ class LatentSpace(SimpleWrapper):
     def __init__(self, env):
         super().__init__(env)
         self.n = 0
+        self.replay_buffer = replay_buffer.Replay_buffer()
+        self.sample_size = 280
+        self.train_each = 300
 
     def _apply(self, I):
         I = np.reshape(I, (1, -1))
-        autoencoder.train_on(I)
-        autoencoder.visualize_reconstruction(I, self.n, self.n)
-        self.n += 1
+
+        self.replay_buffer.add(I.ravel())
+        if self.n % self.train_each == 0:
+            autoencoder.train_on(self.replay_buffer.sample_as_nd(self.sample_size))
+            if self.n % 1000 == 0:
+                autoencoder.print_loss_and_lr(I)
+                autoencoder.visualize_reconstruction(I, self.n, self.n)
+
+        self.n += 50
         return autoencoder.latent_of(I)
 
 
@@ -63,6 +74,8 @@ class Render(SimpleWrapper):
 
 
 def main():
+    # Make directories for training checkpoint visualization
+    make_data_dirs()
     env = gym.make('Pong-v0')
     env = PongSimplify(env)
     env = LatentSpace(env)
