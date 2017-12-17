@@ -30,10 +30,13 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 
-from utils import decay
+from utils import decay, make_data_dirs, clean_data_dirs
+
+clean_data_dirs()
+make_data_dirs()
 
 # Training Parameters
-initial_learning_rate = learning_rate = 0.9
+initial_learning_rate = learning_rate = 0.2
 
 display_step = 1000
 examples_to_show = 10
@@ -96,9 +99,10 @@ optimizer = tf.train.RMSPropOptimizer(learning_rate).minimize(loss)
 # Initialize the variables (i.e. assign their default value)
 init = tf.global_variables_initializer()
 
-# Start Training
-# Start a new TF session
-sess = tf.Session()
+# Start a new TF session that allocates memory when needed
+config = tf.ConfigProto()
+config.gpu_options.allow_growth=True
+sess = tf.Session(config=config)
 
 iteration = 0
 def train_on(batch_x):
@@ -107,15 +111,24 @@ def train_on(batch_x):
     global learning_rate
     global iteration
     learning_rate = decay(initial_learning_rate, iteration)
+
+    with sess.as_default():
+        _, _ = sess.run([optimizer, loss], feed_dict={X: batch_x})
+
     iteration += 1
 
-    _, l = sess.run([optimizer, loss], feed_dict={X: batch_x})
-    print(f'Minibatch Loss: {l} lr {learning_rate}')
+
+def print_loss_and_lr(batch_x):
+    with sess.as_default():
+        _, l = sess.run([optimizer, loss], feed_dict={X: batch_x})
+        print(f"Loss {l:06f} lr {learning_rate:06f}")
+
 
 def latent_of(observation):
     """Return the latent representation according to the autoencoder
     """
-    return sess.run(encoder_op, feed_dict={X: observation})
+    with sess.as_default():
+        return sess.run(encoder_op, feed_dict={X: observation})
 
 def make_data_dirs():
     try:
@@ -123,13 +136,12 @@ def make_data_dirs():
         os.mkdir('images/reconstructed')
         os.mkdir('images/original')
     except Exception as e:
-        print(e) 
+        print(e)
         # Directory is already there
         pass
 
 # Run the initializer
 sess.run(init)
-make_data_dirs()
 
 def visualize_reconstruction(batch_x, learning_iteration, encoder_iteration):
     """Encode and decode observations from a game. Visualizes reconstructed and
@@ -138,25 +150,26 @@ def visualize_reconstruction(batch_x, learning_iteration, encoder_iteration):
     n = 1
     canvas_orig = np.empty((80 * n, 80 * n))
     canvas_recon = np.empty((80 * n, 80 * n))
-    for i in range(n):
-        # Encode and decode the digit image
-        g = sess.run(decoder_op, feed_dict={X: batch_x})
+    with sess.as_default():
+        for i in range(n):
+            # Encode and decode the digit image
+            g = sess.run(decoder_op, feed_dict={X: batch_x})
 
-        # Display original images
-        for j in range(n):
-            # Draw the original digits
-            canvas_orig[i * 80:(i + 1) * 80, j * 80:(j + 1) * 80] = \
-                batch_x[j].reshape([80, 80])
-        # Display reconstructed images
-        for j in range(n):
-            # Draw the reconstructed digits
-            canvas_recon[i * 80:(i + 1) * 80, j * 80:(j + 1) * 80] = \
-                g[j].reshape([80, 80])
+            # Display original images
+            for j in range(n):
+                # Draw the original digits
+                canvas_orig[i * 80:(i + 1) * 80, j * 80:(j + 1) * 80] = \
+                    batch_x[j].reshape([80, 80])
+            # Display reconstructed images
+            for j in range(n):
+                # Draw the reconstructed digits
+                canvas_recon[i * 80:(i + 1) * 80, j * 80:(j + 1) * 80] = \
+                    g[j].reshape([80, 80])
 
-    plt.figure(figsize=(n, n))
-    image_path = f"images/original/original_{learning_iteration:04d}_{encoder_iteration:02d}.png"
-    plt.imsave(image_path, canvas_orig, origin="upper", cmap="Greys")
+        plt.figure(figsize=(n, n))
+        image_path = f"images/original/original_{learning_iteration:06d}_{encoder_iteration:02d}.png"
+        plt.imsave(image_path, canvas_orig, origin="upper", cmap="Greys")
 
-    plt.figure(figsize=(n, n))
-    image_path = f"images/reconstructed/reconstructed_{learning_iteration:04d}_{encoder_iteration:07d}.png"
-    plt.imsave(image_path, canvas_recon, origin="upper", cmap="Greys")
+        plt.figure(figsize=(n, n))
+        image_path = f"images/reconstructed/reconstructed_{learning_iteration:06d}_{encoder_iteration:07d}.png"
+        plt.imsave(image_path, canvas_recon, origin="upper", cmap="Greys")
