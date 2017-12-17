@@ -1,4 +1,6 @@
 import numpy as np
+import os
+import sys
 
 
 def rollout(policy, env):
@@ -40,4 +42,24 @@ def assert_shapetype(array, dtype, shape):
 def v(q, state):
     return max(q(((*state, x),))[0] for x in q.action_space)
 
+
+def make_data_dirs():
+    try:
+        os.mkdir('images')
+        os.mkdir('images/reconstructed')
+        os.mkdir('images/original')
+    except Exception as e:
+        print(e)
+        # Directory is already there
+        pass
+
+def clean_data_dirs():
+    rel_path = 'images'
+    try:
+        for folder in os.listdir(rel_path):
+            for image in os.listdir(os.path.join(rel_path,folder)):
+                os.remove(os.path.join(rel_path, folder, image))
+    except Exception as e:
+        print(e)
+        sys.exit()
 
