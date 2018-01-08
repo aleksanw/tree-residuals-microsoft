@@ -75,9 +75,9 @@ def run(env):
     replay_buffer = Replay_buffer()
 
     q = Approximator_ResidualBoosting(action_space)
-    initial_learning_rate = 0.70
+    initial_learning_rate = 0.20
     learning_rate = initial_learning_rate
-    initial_epsilon = 0.90
+    initial_epsilon = 0.20
     epsilon = initial_epsilon
     rollout_batch_size = 1
     replay_batch_size = 1
@@ -89,7 +89,7 @@ def run(env):
     if plot_policy:
         policy_plot = PolicyPlotter()
 
-    for learning_iteration in range(20):
+    for learning_iteration in range(500):
         if learning_iteration % 1 == 0:
             greedy_policy = Policy_Greedy(q)
             if plot_policy:
@@ -113,3 +113,4 @@ def run(env):
         epsilon = decay(initial_epsilon, learning_iteration*rollout_batch_size)
         q.learn(learning_rate, X, Y_target)
 
+    yield locals()
