@@ -1,27 +1,50 @@
+import matplotlib
+matplotlib.use('Agg')
 import glue
 import gym  # OpenAI gym
 import matplotlib.pyplot as plt
 import helpers.plotter as plotter
+import pandas as pd
+import multiprocessing
 
 from helpers.variables import write_variables_to_latex
 
-def main():
-    env_name = 'Blackjack-v0'
+env_name = 'Blackjack-v0'
+
+def runglue(_):
     env = gym.make(env_name)
-    result = list(glue.run(env))
+    params, prefs = glue.run(env)
+    return params, dict(prefs)
 
-    data = result[:-1]
-    variables = result[-1]
-    plotter.plot_rolling_mean(env_name, data)
+def main():
+    pool = multiprocessing.Pool()
+    results = pool.map(runglue, range(30))
+    perfs = [result[1] for result in results]
 
+    variables = results[0][0]
     wanted_written = ['initial_learning_rate', 'initial_epsilon',
-            'rollout_batch_size',
-            ]
+                      'rollout_batch_size', 'num_episodes',
+    ]
     write_variables_to_latex(variables, wanted_written, env_name)
 
+    fig = plt.figure()
+    ax = fig.gca(xlabel='Interactions with environment',
+                 ylabel=f'Episode reward in {env_name}')
 
+    df = pd.DataFrame()
+    for i, perf in enumerate(perfs):
+        ser =  pd.Series(dict(perf))
+        df[i] = ser
+        ser.plot(ax=ax, color='gray')
 
+    mean = df.mean(axis=1)
+    print(mean)
+    mean_df = pd.DataFrame({'Rolling avg.': mean})
+    mean_df.plot(ax=ax, color='orange')
 
+    fig.tight_layout()
+    figures = 'figures/'
+    plt.savefig(figures + env_name + '.pdf', format='pdf', dpi=1000)
 
 
 if __name__ == '__main__':
