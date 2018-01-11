@@ -13,7 +13,8 @@ def plot_rolling_mean(env_name, run_yields):
     data = pd.DataFrame({
         'Tree': pd.Series(dict(run_yields)),
     })
-    data['Moving Average'] = data.rolling(window=20, min_periods=1).mean()
+    data['Moving Average'] = data.rolling(window=20, min_periods=1,
+            center=True).mean()
 
     fig = plt.figure()
     ax = fig.gca(xlabel='Interactions with environment',
