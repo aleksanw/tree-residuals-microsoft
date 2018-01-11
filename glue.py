@@ -75,8 +75,10 @@ def run(env):
     initial_epsilon = 0.50
     rollout_batch_size = 1
     replay_batch_size = 1
-    learning_iterations = 300
+    learning_iterations = 40
     num_episodes = learning_iterations*rollout_batch_size
+
+    params = locals()
 
     def gen():
         action_space = list(range(env.action_space.n))
@@ -97,7 +99,7 @@ def run(env):
                 if plot_policy:
                     policy_plot.update(env, greedy_policy)
                 reward_sum = avg(test_policy(greedy_policy, env) for _
-                        in range(10))
+                        in range(1))
                 print(f"Episode {learning_iteration*rollout_batch_size} Reward {reward_sum} lr {learning_rate} epsilon {epsilon}")
                 yield interaction_count, reward_sum
 
@@ -116,4 +118,4 @@ def run(env):
             epsilon = decay(initial_epsilon, learning_iteration*rollout_batch_size)
             q.learn(learning_rate, X, Y_target)
 
-    return (locals(), gen())
+    return (params, gen())
