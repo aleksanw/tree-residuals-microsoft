@@ -8,6 +8,7 @@ def write_variable_to_latex(var, var_name):
     target.write(var)
     target.close()
 
-def write_variables_to_latex(variables, names, env_name):
-    for name in names:
-        write_variable_to_latex(variables[name], env_name + name)
+def write_variables_to_latex(variables, names, env_name, agent_name):
+    for variable_name in names:
+        write_variable_to_latex(variables[variable_name], env_name +
+                agent_name + variable_name)
