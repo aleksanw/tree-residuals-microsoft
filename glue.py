@@ -70,52 +70,41 @@ class PolicyPlotter:
 def images_from_episodes(episodes):
     return np.array([sars[0] for e in episodes for sars in e])
 
-def run(env):
-    initial_learning_rate = 0.20
-    initial_epsilon = 0.50
-    rollout_batch_size = 1
-    replay_batch_size = 1
-    learning_iterations = 40
-    num_episodes = learning_iterations*rollout_batch_size
+def run(env, config):
+    action_space = list(range(env.action_space.n))
+    replay_buffer = Replay_buffer()
 
-    params = locals()
+    q = Approximator_ResidualBoosting(action_space)
+    learning_rate = config.initial_learning_rate
+    epsilon = config.initial_epsilon
+    interaction_count = 0
 
-    def gen():
-        action_space = list(range(env.action_space.n))
-        replay_buffer = Replay_buffer()
+    plot_policy = hasattr(env.unwrapped, 'desc')
+    if plot_policy:
+        policy_plot = PolicyPlotter()
 
-        q = Approximator_ResidualBoosting(action_space)
-        learning_rate = initial_learning_rate
-        epsilon = initial_epsilon
-        interaction_count = 0
+    for learning_iteration in range(config.learning_iterations):
+        if learning_iteration % 1 == 0:
+            greedy_policy = Policy_Greedy(q)
+            if plot_policy:
+                policy_plot.update(env, greedy_policy)
+            reward_sum = avg(test_policy(greedy_policy, env) for _
+                    in range(config.test_rollouts))
+            print(f"Episode {learning_iteration*config.rollout_batch_size} Reward {reward_sum} lr {learning_rate} epsilon {epsilon}")
+            yield interaction_count, reward_sum
 
-        plot_policy = hasattr(env.unwrapped, 'desc')
-        if plot_policy:
-            policy_plot = PolicyPlotter()
+        policy = Policy_EpsilonGreedy(q, epsilon=epsilon)
+        episodes = [list(rollout(policy, env)) for _ in range(config.rollout_batch_size)]
+        interaction_count += sum(map(len, episodes))
+        replay_buffer += episodes
+        sampled_episodes = replay_buffer.sample(config.replay_batch_size)
+        sampled_episodes = episodes
 
-        for learning_iteration in range(learning_iterations):
-            if learning_iteration % 1 == 0:
-                greedy_policy = Policy_Greedy(q)
-                if plot_policy:
-                    policy_plot.update(env, greedy_policy)
-                reward_sum = avg(test_policy(greedy_policy, env) for _
-                        in range(1))
-                print(f"Episode {learning_iteration*rollout_batch_size} Reward {reward_sum} lr {learning_rate} epsilon {epsilon}")
-                yield interaction_count, reward_sum
+        targets = TD0_targets(sampled_episodes, q)
+        X, Y_target = zip(*targets)
+        Y_target = np.reshape(Y_target, (-1, 1))
 
-            policy = Policy_EpsilonGreedy(q, epsilon=epsilon)
-            episodes = [list(rollout(policy, env)) for _ in range(rollout_batch_size)]
-            interaction_count += sum(map(len, episodes))
-            replay_buffer += episodes
-            sampled_episodes = replay_buffer.sample(replay_batch_size)
-            sampled_episodes = episodes
+        learning_rate = decay(config.initial_learning_rate, learning_iteration*config.rollout_batch_size)
+        epsilon = decay(config.initial_epsilon, learning_iteration*config.rollout_batch_size)
+        q.learn(learning_rate, X, Y_target)
 
-            targets = TD0_targets(sampled_episodes, q)
-            X, Y_target = zip(*targets)
-            Y_target = np.reshape(Y_target, (-1, 1))
-
-            learning_rate = decay(initial_learning_rate, learning_iteration*rollout_batch_size)
-            epsilon = decay(initial_epsilon, learning_iteration*rollout_batch_size)
-            q.learn(learning_rate, X, Y_target)
-
-    return (params, gen())
