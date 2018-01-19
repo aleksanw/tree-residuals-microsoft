@@ -60,11 +60,9 @@ class experience_buffer():
 
 
 def updateTargetGraph(tfVars,tau):
-    print(tfVars)
     total_vars = len(tfVars)
     op_holder = []
     for idx,var in enumerate(tfVars[0:total_vars//2]):
-        #print(idx,var, tfVars[idx+total_vars//2].name)
         op_holder.append(tfVars[idx+total_vars//2].assign((var.value()*tau) + ((1-tau)*tfVars[idx+total_vars//2].value())))
     return op_holder
 
@@ -90,90 +88,72 @@ def evaluate(env, sess, q_max, input_ph, visualize=False, v_func=None):
     return mean_reward
 
 
-def run(env):
-    num_episodes = 15000 #How many episodes of game environment to train network with.
-    initial_epsilon = 1 #Starting chance of random action
+def run(env, config):
+    load_model = False #Whether to load a saved model.
 
-    rollout_batch_size = 100 #How many experiences to use for each training step.
-    update_freq = 4 #How often to perform a training step.
-    y = .99 #Discount factor on the target Q-values
-    end_epsilon = 0 #0.1 #Final chance of random action
-    tau = 0.001 #Rate to update target network toward primary network
-    hiddens = [50, 50]
-    annealing_steps = 30000. #How many steps of training to reduce initial_epsilon to end_epsilon.
-    pre_train_steps = 10000 #How many steps of random actions before training begins.
+    num_actions = env.action_space.n
+    input_shape = list(env.observation_space.shape)
 
 
-    succ_threshold = 100
-    params = locals()
-    def gen():
-        load_model = False #Whether to load a saved model.
+    tf.reset_default_graph()
+    mainQN = Qnetwork(input_shape, config.hiddens, num_actions, layer_norm=False)
+    targetQN = Qnetwork(input_shape, config.hiddens, num_actions, layer_norm=False)
 
-        num_actions = env.action_space.n
-        input_shape = list(env.observation_space.shape)
+    init = tf.global_variables_initializer()
+    saver = tf.train.Saver()
+    trainables = tf.trainable_variables()
+    targetOps = updateTargetGraph(trainables,config.tau)
+    myBuffer = experience_buffer()
+    #Set the rate of random action decrease. 
+    epsilon = config.initial_epsilon
+    stepDrop = (config.initial_epsilon - config.end_epsilon)/config.annealing_steps
+    total_steps = 0
 
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.allow_growth=True
+    with tf.Session(config=tf_config) as sess:
+        sess.run(init)
 
-        tf.reset_default_graph()
-        mainQN = Qnetwork(input_shape, hiddens, num_actions, layer_norm=False)
-        params['initial_learning_rate'] = mainQN.learning_rate
-        targetQN = Qnetwork(input_shape, hiddens, num_actions, layer_norm=False)
+        for epi in range(config.learning_iterations):
+            if epi % 40  == 0:
+                mean_reward = evaluate(env, sess, mainQN.predict, mainQN.input)
+                print(f"Episode {epi} Reward {mean_reward} epsilon {epsilon}")
+                yield total_steps, mean_reward
 
-        init = tf.global_variables_initializer()
-        saver = tf.train.Saver()
-        trainables = tf.trainable_variables()
-        targetOps = updateTargetGraph(trainables,tau)
-        myBuffer = experience_buffer()
-        #Set the rate of random action decrease. 
-        epsilon = initial_epsilon
-        stepDrop = (initial_epsilon - end_epsilon)/annealing_steps
-        total_steps = 0
+            episodeBuffer = experience_buffer()
+            #Reset environment and get first new observation
+            s = np.asarray(env.reset()).flatten()
+            done = False
+            #The Q-Network
+            while not done:
+                #Choose an action by greedily (with epsilon chance of random action) from the Q-network
+                if np.random.rand(1) < epsilon or total_steps < config.pre_train_steps:
+                   a = np.random.randint(0,env.action_space.n)
+                else:
+                    a = sess.run(mainQN.predict,feed_dict={mainQN.input:[s]})[0]
+                s1,r,done,_ = env.step(a)
+                s1 = np.asarray(s1).flatten()
+                total_steps += 1
+                episodeBuffer.add(np.reshape(np.array([s,a,r,s1,done]),[1,5])) #Save the experience to our episode buffer.
 
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth=True
-        with tf.Session(config=config) as sess:
-            sess.run(init)
+                if total_steps > config.pre_train_steps:
+                    if epsilon > config.end_epsilon:
+                        epsilon -= stepDrop
+                        epsilon = max(epsilon,0)
 
-            for epi in range(num_episodes):
-                if epi % 5 == 0:
-                    mean_reward = evaluate(env, sess, mainQN.predict, mainQN.input)
-                    print(f"Episode {epi} Reward {mean_reward} epsilon {epsilon}")
-                    yield total_steps, mean_reward
+                    if total_steps % (config.update_freq) == 0:
+                        trainBatch = myBuffer.sample(config.rollout_batch_size) #Get a random batch of experiences.
+                        #Below we perform the Double-DQN update to the target Q-values
+                        Q1 = sess.run(mainQN.predict,feed_dict={mainQN.input:np.vstack(trainBatch[:,3])})
+                        Q2 = sess.run(targetQN.Qout,feed_dict={targetQN.input:np.vstack(trainBatch[:,3])})
+                        end_multiplier = -(trainBatch[:,4] - 1)
+                        doubleQ = Q2[range(config.rollout_batch_size),Q1]
+                        targetQ = trainBatch[:,2] + (config.y*doubleQ * end_multiplier)
+                        #Update the network with our target values.
+                        _ = sess.run(mainQN.updateModel, \
+                            feed_dict={mainQN.input:np.vstack(trainBatch[:,0]),mainQN.targetQ:targetQ, mainQN.actions:trainBatch[:,1]})
 
-                episodeBuffer = experience_buffer()
-                #Reset environment and get first new observation
-                s = np.asarray(env.reset()).flatten()
-                done = False
-                #The Q-Network
-                while not done:
-                    #Choose an action by greedily (with epsilon chance of random action) from the Q-network
-                    if np.random.rand(1) < epsilon or total_steps < pre_train_steps:
-                       a = np.random.randint(0,env.action_space.n)
-                    else:
-                        a = sess.run(mainQN.predict,feed_dict={mainQN.input:[s]})[0]
-                    s1,r,done,_ = env.step(a)
-                    s1 = np.asarray(s1).flatten()
-                    total_steps += 1
-                    episodeBuffer.add(np.reshape(np.array([s,a,r,s1,done]),[1,5])) #Save the experience to our episode buffer.
+                        updateTarget(targetOps,sess) #Update the target network toward the primary network.
+                s = s1
 
-                    if total_steps > pre_train_steps:
-                        if epsilon > end_epsilon:
-                            epsilon -= stepDrop
-                            epsilon = max(epsilon,0)
-
-                        if total_steps % (update_freq) == 0:
-                            trainBatch = myBuffer.sample(rollout_batch_size) #Get a random batch of experiences.
-                            #Below we perform the Double-DQN update to the target Q-values
-                            Q1 = sess.run(mainQN.predict,feed_dict={mainQN.input:np.vstack(trainBatch[:,3])})
-                            Q2 = sess.run(targetQN.Qout,feed_dict={targetQN.input:np.vstack(trainBatch[:,3])})
-                            end_multiplier = -(trainBatch[:,4] - 1)
-                            doubleQ = Q2[range(rollout_batch_size),Q1]
-                            targetQ = trainBatch[:,2] + (y*doubleQ * end_multiplier)
-                            #Update the network with our target values.
-                            _ = sess.run(mainQN.updateModel, \
-                                feed_dict={mainQN.input:np.vstack(trainBatch[:,0]),mainQN.targetQ:targetQ, mainQN.actions:trainBatch[:,1]})
-
-                            updateTarget(targetOps,sess) #Update the target network toward the primary network.
-                    s = s1
-
-                myBuffer.add(episodeBuffer.buffer)
-    return (params, gen())
+            myBuffer.add(episodeBuffer.buffer)
