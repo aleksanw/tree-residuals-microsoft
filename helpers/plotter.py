@@ -9,7 +9,7 @@ def plot(name, perfs):
     plt.plot(*data)
     plt.savefig(figures + name + '.pdf', format='pdf', dpi=1000)
 
-def plot_with_mean(env_name, perfs):
+def plot_with_mean(env_name, agent_name, perfs):
     fig = plt.figure()
     ax = fig.gca(xlabel='Interactions with environment',
                  ylabel=f'Episode reward in {env_name}')
@@ -23,5 +23,5 @@ def plot_with_mean(env_name, perfs):
     mean = df.mean(axis=1)
     mean_df = pd.DataFrame({'Average': mean})
     mean_df.plot(ax=ax, color='orange')
-    plt.savefig(figures + env_name + '.pdf', format='pdf', dpi=1000)
+    plt.savefig(figures + env_name + agent_name + '.pdf', format='pdf', dpi=1000)
 
