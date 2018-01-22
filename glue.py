@@ -100,7 +100,7 @@ def run(env, config):
         sampled_episodes = replay_buffer.sample(config.replay_batch_size)
         sampled_episodes = episodes
 
-        targets = TD0_targets(sampled_episodes, q)
+        targets = TD0_targets(sampled_episodes, q, config.discount)
         X, Y_target = zip(*targets)
         Y_target = np.reshape(Y_target, (-1, 1))
 
