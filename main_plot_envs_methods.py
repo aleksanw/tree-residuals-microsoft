@@ -2,6 +2,7 @@ import matplotlib
 matplotlib.use('Agg')
 import corridor
 import gym
+import time
 import matplotlib.pyplot as plt
 import multiprocessing
 import os
@@ -13,7 +14,6 @@ import glue as tree_agent
 import helpers.pickler as pickler
 import helpers.plotter as plotter
 from helpers.variables import write_variables_to_latex
-
 
 class Config(dict):
     def __getattr__(self, name):
@@ -32,10 +32,11 @@ class Config(dict):
 default_tree_config = Config(
         initial_epsilon = 0.50,
         initial_learning_rate = 0.20,
-        learning_iterations = 10,
+        learning_iterations = 20,
         replay_batch_size = 1,
         rollout_batch_size = 1,
         test_rollouts = 4,
+        discount = 0.95,
         )
 
 tree_config = {
@@ -53,7 +54,7 @@ tree_config = {
 default_dqn_config = Config(
         initial_epsilon = 0.50,
         initial_learning_rate = 0.20,
-        learning_iterations = 40000,
+        learning_iterations = 4000,
         replay_batch_size = 1,
         rollout_batch_size = 1,
         test_rollouts = 4,
@@ -122,39 +123,64 @@ def dropafter(predicate, iterable):
             return
 
 
-envs = [
+def get_config(results):
+    # Config are yielded first by agent runs
+    return results[0][0]
+
+
+def get_perfs(results):
+    # Performances are yielded last(index 1) by agent runs
+    return [result[1] for result in results]
+
+
+def get_current_time():
+    # Not really start-time, but called only once at start
+    return time.strftime("%Y_%m_%d_%H_%M")
+
+
+envs= [
     'Blackjack-v0',
-    'NChain-v0' ,
+    #'NChain-v0' ,
+    #'Pong-v0',
     ]
 
 agents = [
     ('tree', run_tree),
-    ('dqn', run_dqn)
+    #('dqn', run_dqn)
     ]
 
 thread_config = {
-        'tree' : 30,
-        'dqn' : 1
+        'tree' : 1,
+        'dqn' : 5
         }
 
 def main():
-    basedir = 'perfs'
+    start_time = get_current_time()
 
     for env_name in envs:
         for agent_name, agent in agents:
             pool = multiprocessing.Pool()
             results = pool.map(agent, [env_name]*thread_config[agent_name])
-            perfs = [result[1] for result in results]
-            config = results[0][0]
+            config = get_config(results)
+            perfs = get_perfs(results)
+
 
             wanted_written = ['initial_learning_rate', 'initial_epsilon',
                               'rollout_batch_size', 'num_episodes',
             ]
-            write_variables_to_latex(config, wanted_written,
-                    env_name, agent_name)
 
-            pickler.dump(os.path.join('perfs', env_name, f'{agent_name}.pickle'), perfs)
-            plotter.plot_with_mean(env_name, agent_name, perfs)
+            agent_run = Config(
+                    start_time = start_time,
+                    env_name = env_name,
+                    agent_name = agent_name,
+                    perfs = perfs, 
+                    wanted_written = wanted_written,
+                    config = config,
+                    )
+
+            write_variables_to_latex(agent_run)
+            plotter.plot_with_mean(agent_run)
+            pickler.dump(agent_run)
 
 
 if __name__ == '__main__':
