@@ -1,12 +1,11 @@
 from utils import v
 
-def TDinf_targets(episodes):
+def TDinf_targets(episodes, discount=0.95):
     """Generate td_targets (TDinf).
     episodes = (episode, ..)
     episode = (state, action, reward, newstate)
     Events in episode must come in order. That is event[0].newstate == event[1].state.
     """
-    discount = 0.95
     for episode in episodes:
         episode = list(episode)
         # Work backwards and calculate td_targets
@@ -16,8 +15,7 @@ def TDinf_targets(episodes):
             yield ((*state, action), td_target)
 
 
-def TD0_targets(episodes, q):
-    discount = 0.95
+def TD0_targets(episodes, q, discount=0.95):
     for episode in episodes:
         for state, action, reward, newstate in episode:
             td_target = reward + discount*v(q, newstate)
