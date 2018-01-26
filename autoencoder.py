@@ -42,9 +42,11 @@ display_step = 1000
 examples_to_show = 10
 
 # Network Parameters
+num_input = 80*80 # Pong data input (img shape: 80*80)
 num_hidden_1 = 256 # 1st layer num features
-num_hidden_2 = 4 # 2nd layer num features (the latent dim)
-num_input = 80*80 # Pong data input (img shape: 28*28)
+num_hidden_2 = 128 # 2st layer num features
+num_hidden_3 = 64  # 1st layer num features
+num_hidden_4 = 4 # 2nd layer num features (the latent dim)
 
 # tf Graph input (only pictures)
 X = tf.placeholder("float", [None, num_input])
@@ -52,14 +54,22 @@ X = tf.placeholder("float", [None, num_input])
 weights = {
     'encoder_h1': tf.Variable(tf.random_normal([num_input, num_hidden_1])),
     'encoder_h2': tf.Variable(tf.random_normal([num_hidden_1, num_hidden_2])),
-    'decoder_h1': tf.Variable(tf.random_normal([num_hidden_2, num_hidden_1])),
-    'decoder_h2': tf.Variable(tf.random_normal([num_hidden_1, num_input])),
+    'encoder_h3': tf.Variable(tf.random_normal([num_hidden_2, num_hidden_3])),
+    'encoder_h4': tf.Variable(tf.random_normal([num_hidden_3, num_hidden_4])),
+    'decoder_h1': tf.Variable(tf.random_normal([num_hidden_4, num_hidden_3])),
+    'decoder_h2': tf.Variable(tf.random_normal([num_hidden_3, num_hidden_2])),
+    'decoder_h3': tf.Variable(tf.random_normal([num_hidden_2, num_hidden_1])),
+    'decoder_h4': tf.Variable(tf.random_normal([num_hidden_1, num_input])),
 }
 biases = {
     'encoder_b1': tf.Variable(tf.random_normal([num_hidden_1])),
     'encoder_b2': tf.Variable(tf.random_normal([num_hidden_2])),
-    'decoder_b1': tf.Variable(tf.random_normal([num_hidden_1])),
-    'decoder_b2': tf.Variable(tf.random_normal([num_input])),
+    'encoder_b3': tf.Variable(tf.random_normal([num_hidden_3])),
+    'encoder_b4': tf.Variable(tf.random_normal([num_hidden_4])),
+    'decoder_b1': tf.Variable(tf.random_normal([num_hidden_3])),
+    'decoder_b2': tf.Variable(tf.random_normal([num_hidden_2])),
+    'decoder_b3': tf.Variable(tf.random_normal([num_hidden_1])),
+    'decoder_b4': tf.Variable(tf.random_normal([num_input])),
 }
 
 # Building the encoder
@@ -70,7 +80,13 @@ def encoder(x):
     # Encoder Hidden layer with sigmoid activation #2
     layer_2 = tf.nn.sigmoid(tf.add(tf.matmul(layer_1, weights['encoder_h2']),
                                    biases['encoder_b2']))
-    return layer_2
+    # Encoder Hidden layer with sigmoid activation #3
+    layer_3 = tf.nn.sigmoid(tf.add(tf.matmul(layer_2, weights['encoder_h3']),
+                                   biases['encoder_b3']))
+    # Encoder Hidden layer with sigmoid activation #3
+    layer_4 = tf.nn.sigmoid(tf.add(tf.matmul(layer_3, weights['encoder_h4']),
+                                   biases['encoder_b4']))
+    return layer_4
 
 
 # Building the decoder
@@ -81,7 +97,13 @@ def decoder(x):
     # Decoder Hidden layer with sigmoid activation #2
     layer_2 = tf.nn.sigmoid(tf.add(tf.matmul(layer_1, weights['decoder_h2']),
                                    biases['decoder_b2']))
-    return layer_2
+    # Decoder Hidden layer with sigmoid activation #3
+    layer_3 = tf.nn.sigmoid(tf.add(tf.matmul(layer_2, weights['decoder_h3']),
+                                   biases['decoder_b3']))
+    # Decoder Hidden layer with sigmoid activation #3
+    layer_4 = tf.nn.sigmoid(tf.add(tf.matmul(layer_3, weights['decoder_h4']),
+                                   biases['decoder_b4']))
+    return layer_4
 
 # Construct model
 encoder_op = encoder(X)
@@ -110,18 +132,19 @@ def train_on(batch_x):
     """
     global learning_rate
     global iteration
-    learning_rate = decay(initial_learning_rate, iteration)
+    learning_rate = decay(initial_learning_rate, iteration, decay=0.1)
 
     with sess.as_default():
-        _, _ = sess.run([optimizer, loss], feed_dict={X: batch_x})
-
+        _, l = sess.run([optimizer, loss], feed_dict={X: batch_x})
     iteration += 1
+
+    return l
 
 
 def print_loss_and_lr(batch_x):
     with sess.as_default():
         _, l = sess.run([optimizer, loss], feed_dict={X: batch_x})
-        print(f"Loss {l:06f} lr {learning_rate:06f}")
+        print(f"Loss {l:09f} lr {learning_rate:09f}")
 
 
 def latent_of(observation):
@@ -135,6 +158,7 @@ def make_data_dirs():
         os.mkdir('images')
         os.mkdir('images/reconstructed')
         os.mkdir('images/original')
+        os.mkdir('checkpoints')
     except Exception as e:
         print(e)
         # Directory is already there
@@ -142,6 +166,7 @@ def make_data_dirs():
 
 # Run the initializer
 sess.run(init)
+saver = tf.train.Saver()
 
 def visualize_reconstruction(batch_x, learning_iteration, encoder_iteration):
     """Encode and decode observations from a game. Visualizes reconstructed and
@@ -173,3 +198,8 @@ def visualize_reconstruction(batch_x, learning_iteration, encoder_iteration):
         plt.figure(figsize=(n, n))
         image_path = f"images/reconstructed/reconstructed_{learning_iteration:06d}_{encoder_iteration:07d}.png"
         plt.imsave(image_path, canvas_recon, origin="upper", cmap="Greys")
+
+
+def save_checkpoint(n):
+    print('Saved checkpoint', n)
+    saver.save(sess, 'checkpoints')
