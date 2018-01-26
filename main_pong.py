@@ -1,5 +1,6 @@
 import corridor
 import gym
+import tensorflow
 
 import matplotlib
 matplotlib.use('Agg')
@@ -39,22 +40,31 @@ class PongSimplify(SimpleWrapper):
 class LatentSpace(SimpleWrapper):
     def __init__(self, env):
         super().__init__(env)
-        self.n = 0
+        self.n = 1
         self.replay_buffer = replay_buffer.Replay_buffer()
-        self.sample_size = 280
-        self.train_each = 300
+        self.sample_size = 40
+        self.train = True
+        self.auto_train = True
 
     def _apply(self, I):
         I = np.reshape(I, (1, -1))
 
-        self.replay_buffer.add(I.ravel())
-        if self.n % self.train_each == 0:
-            autoencoder.train_on(self.replay_buffer.sample_as_nd(self.sample_size))
-            if self.n % 1000 == 0:
-                autoencoder.print_loss_and_lr(I)
-                autoencoder.visualize_reconstruction(I, self.n, self.n)
-
-        self.n += 50
+        if self.train:
+            self.replay_buffer.add(I.ravel())
+            if len(self.replay_buffer.buffer) == self.replay_buffer.length:
+                while self.auto_train:
+                    loss = autoencoder.train_on(self.replay_buffer.sample_as_nd(self.sample_size))
+                    autoencoder.print_loss_and_lr(I)
+                    print(f"AE loss {loss}")
+                    if self.n > 5000000:
+                        self.train = False
+                        self.auto_train = False
+                        print(f"Setting train to false, {self.train}, {loss}")
+                    if self.n % 1000 == 0:
+                        autoencoder.visualize_reconstruction(I, self.n, self.n)
+                        autoencoder.save_checkpoint(self.n)
+                    self.n += 1
+            
         return autoencoder.latent_of(I)
 
 
@@ -74,7 +84,7 @@ class Render(SimpleWrapper):
 
 
 def main():
-    # Make directories for training checkpoint visualization
+    # Make directories for training checkpointing and visualization
     make_data_dirs()
     env = gym.make('Pong-v0')
     env = PongSimplify(env)
