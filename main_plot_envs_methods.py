@@ -9,10 +9,12 @@ import os
 import pandas as pd
 import pickle
 
+import ae_agent
 import dqn as dqn_agent
 import glue as tree_agent
 import helpers.pickler as pickler
 import helpers.plotter as plotter
+
 from helpers.variables import write_variables_to_latex
 
 class Config(dict):
@@ -47,6 +49,28 @@ tree_config = {
             learning_iterations = 40,
             ),
         'Pong-v0' : default_tree_config + Config(
+            ),
+        }
+
+default_ae_tree_config = Config(
+        initial_epsilon = 0.50,
+        initial_learning_rate = 0.20,
+        learning_iterations = 20,
+        replay_batch_size = 1,
+        rollout_batch_size = 1,
+        test_rollouts = 1,
+        discount = 0.95,
+        )
+
+ae_tree_config = {
+        'Blackjack-v0' : default_ae_tree_config + Config(
+            #learning_iterations = 350,
+            ),
+        'NChain-v0' : default_ae_tree_config + Config(
+            learning_iterations = 40,
+            ),
+        'Pong-v0' : default_ae_tree_config + Config(
+            learning_iterations = 40000,
             ),
         }
 
@@ -109,11 +133,17 @@ def run_dqn(env_name):
     return (config, dict(perfs))
 
 
+def run_ae(env_name):
+    env = gym.make(env_name)
+    config = aggregate_config(env_name, ae_tree_config)
+    perfs = ae_agent.run(env, config)
+    return config, dict(perfs)
+
+
 def run_table(env_name):
     env = gym.make(env_name)
     params, prefs = table_agent.run(env)
     return params, dict(prefs)
-
 
 
 def dropafter(predicate, iterable):
@@ -125,33 +155,35 @@ def dropafter(predicate, iterable):
 
 def get_config(results):
     # Config are yielded first by agent runs
+    # The same config are used for all agents of same type
     return results[0][0]
 
 
 def get_perfs(results):
-    # Performances are yielded last(index 1) by agent runs
+    # Performances are yielded as index 1 by agent runs
     return [result[1] for result in results]
 
 
 def get_current_time():
-    # Not really start-time, but called only once at start
     return time.strftime("%Y_%m_%d_%H_%M")
 
 
 envs= [
-    'Blackjack-v0',
+    #'Blackjack-v0',
     #'NChain-v0' ,
-    #'Pong-v0',
+    'Pong-v0',
     ]
 
 agents = [
-    ('tree', run_tree),
+    #('tree', run_tree),
     #('dqn', run_dqn)
+    ('ae', run_ae),
     ]
 
 thread_config = {
-        'tree' : 1,
-        'dqn' : 5
+        'tree' : 4,
+        'dqn' : 2,
+        'ae' : 1,
         }
 
 def main():
