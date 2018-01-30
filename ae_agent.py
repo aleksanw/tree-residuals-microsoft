@@ -41,27 +41,26 @@ class LatentSpace(SimpleWrapper):
         super().__init__(env)
         self.n = 1
         self.replay_buffer = replay_buffer.Replay_buffer()
-        self.sample_size = 40
+        self.sample_size = 64
         self.train = True
         self.auto_train = True
 
     def _apply(self, I):
         I = np.reshape(I, (1, -1))
-        print("Applying latent space!")
 
         if self.train:
             self.replay_buffer.add(I.ravel())
             if len(self.replay_buffer.buffer) == self.replay_buffer.length:
                 while self.auto_train:
-                    loss = autoencoder.train_on(self.replay_buffer.sample_as_nd(self.sample_size))
-                    autoencoder.print_loss_and_lr(I)
-                    print(f"AE loss {loss}")
-                    if self.n > 5000000:
+                    _ = autoencoder.train_on(self.replay_buffer.sample_as_nd(self.sample_size))
+                    if self.n > 50000:
                         self.train = False
                         self.auto_train = False
-                        print(f"Setting train to false, {self.train}, {loss}")
+                        print(f"Setting train to false, {self.train}")
                     if self.n % 1000 == 0:
-                        autoencoder.visualize_reconstruction(I, self.n, self.n)
+                        images = self.replay_buffer.sample_as_nd(8)
+                        autoencoder.print_loss_and_lr(images)
+                        autoencoder.visualize_reconstruction(images, self.n)
                         autoencoder.save_checkpoint(self.n)
                     self.n += 1
             
@@ -82,13 +81,12 @@ class Render(SimpleWrapper):
         self.fig.canvas.draw()
         return I
 
-
 def run(env, config):
     # Make directories for training checkpointing and visualization
     make_data_dirs()
 
     env = PongSimplify(env)
     env = LatentSpace(env)
-    
-    print(env)
-    return tree_agent.run(env, config)
+    perfs = tree_agent.run(env, config)
+    return perfs 
+
