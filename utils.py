@@ -4,7 +4,7 @@ import sys
 
 
 def rollout(policy, env):
-    state = np.array(env.reset()).flatten()
+    state = env.reset().flatten()
     done = False
     while not done:
         action = policy(state)
@@ -44,14 +44,14 @@ def v(q, state):
 
 
 def make_data_dirs():
-    try:
-        os.mkdir('images')
-        os.mkdir('images/reconstructed')
-        os.mkdir('images/original')
-    except Exception as e:
-        print(e)
-        # Directory is already there
-        pass
+    directories = ['images', 'images/reconstructed',
+            'images/original','checkpoints']
+    for directory in directories:
+        try:
+            os.mkdir(directory)
+        except Exception as e:
+            # Directory is already there
+            print(f"{e}, skipping")
 
 def clean_data_dirs():
     rel_path = 'images'
