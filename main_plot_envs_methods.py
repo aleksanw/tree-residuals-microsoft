@@ -1,3 +1,10 @@
+'''
+import multiprocessing, logging
+mpl = multiprocessing.log_to_stderr()
+mpl.setLevel(logging.INFO)
+'''
+
+
 import matplotlib
 matplotlib.use('Agg')
 import corridor
@@ -9,7 +16,6 @@ import os
 import pandas as pd
 import pickle
 
-import ae_agent
 import dqn as dqn_agent
 import glue as tree_agent
 import helpers.pickler as pickler
@@ -134,10 +140,12 @@ def run_dqn(env_name):
 
 
 def run_ae(env_name):
+    import ae_agent
     env = gym.make(env_name)
     config = aggregate_config(env_name, ae_tree_config)
+
     perfs = ae_agent.run(env, config)
-    return config, dict(perfs)
+    return (config, dict(perfs))
 
 
 def run_table(env_name):
@@ -176,7 +184,7 @@ envs= [
 
 agents = [
     #('tree', run_tree),
-    #('dqn', run_dqn)
+    #('dqn', run_dqn),
     ('ae', run_ae),
     ]
 
@@ -196,11 +204,9 @@ def main():
             config = get_config(results)
             perfs = get_perfs(results)
 
-
             wanted_written = ['initial_learning_rate', 'initial_epsilon',
                               'rollout_batch_size', 'num_episodes',
             ]
-
             agent_run = Config(
                     start_time = start_time,
                     env_name = env_name,
