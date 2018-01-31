@@ -108,7 +108,7 @@ def updateTarget(op_holder,sess):
 def evaluate(env, sess, q_max, input_ph, visualize=False, v_func=None):
     succ_epi = 0
     acc_rew = 0
-    for _epi in range(1,10):
+    for _epi in range(1,5):
         _s = np.asarray(env.reset()).flatten()
         _d = False
         while not _d:
@@ -134,7 +134,7 @@ def run_evaluate(env, sess, q_max, input_ph, visualize=False, v_func=None):
 
 def run(env, config):
     batch_size = 3 #How many experiences to use for each training step.
-    update_freq = 4 #How often to perform a training step.
+    update_freq = 1 #How often to perform a training step.
     y = .99 #Discount factor on the target Q-values
     startE = 1 #Starting chance of random action
     endE = 0 #0.1 #Final chance of random action
@@ -146,15 +146,15 @@ def run(env, config):
     num_actions = env.action_space.n
     input_shape = list(env.observation_space.shape)
 
-    num_episodes = 15000 #How many episodes of game environment to train network with.
-    annealing_steps = 30000. #How many steps of training to reduce startE to endE.
-    pre_train_steps = 10000 #How many steps of random actions before training begins.
+    num_episodes = 1000 #How many episodes of game environment to train network with.
+    annealing_steps = 5000. #How many steps of training to reduce startE to endE.
+    pre_train_steps = 100 #How many steps of random actions before training begins.
 
     succ_threshold = 100
 
     tf.reset_default_graph()
-    mainQN = Qnetwork(input_shape, hiddens, num_actions, layer_norm=False)
-    targetQN = Qnetwork(input_shape, hiddens, num_actions, layer_norm=False)
+    mainQN = Qnetwork(input_shape, config.hiddens, num_actions, layer_norm=False)
+    targetQN = Qnetwork(input_shape, config.hiddens, num_actions, layer_norm=False)
 
     init = tf.global_variables_initializer()
 
@@ -162,13 +162,13 @@ def run(env, config):
 
     trainables = tf.trainable_variables()
 
-    targetOps = updateTargetGraph(trainables,tau)
+    targetOps = updateTargetGraph(trainables,config.tau)
 
     myBuffer = experience_buffer()
 
     #Set the rate of random action decrease. 
-    e = startE
-    stepDrop = (startE - endE)/annealing_steps
+    e = config.startE
+    stepDrop = (config.startE - config.endE)/config.annealing_steps
 
     #create lists to contain total rewards and steps per episode
     jList = []
@@ -180,55 +180,51 @@ def run(env, config):
     total_rewards = []
 
     finish = False
-    tf_config = tf.ConfigProto()
-    tf_config.gpu_options.allow_growth=True
-    with tf.Session(config=tf_config) as sess:
+    s_config = tf.ConfigProto()
+    s_config.gpu_options.allow_growth=True
+    sess = tf.Session(config=s_config)
+    with tf.Session() as sess:
         sess.run(init)
 
         succ_epi = 0
-        for epi in range(1, num_episodes+1):
-            if epi % 40  == 1:
-                _, _acc_rew = evaluate(env, sess, mainQN.predict, mainQN.input)
-                mean_reward = _acc_rew/100
-                print(f"Episode {epi} Reward {mean_reward}")
-                yield total_steps, mean_reward
-
-                if finish: break
-                episodeBuffer = experience_buffer()
-                #Reset environment and get first new observation
-                s = np.asarray(env.reset()).flatten()
-                #s = processState(s)
-                d = False
-                rAll = 0
-                j = 0
-                #The Q-Network
-                while (j < max_epLength) and (not d): #If the agent takes longer than 200 moves to reach either of the blocks, end the trial.
-                    j+=1
-                    #Choose an action by greedily (with e chance of random action) from the Q-network
-                if np.random.rand(1) < e or total_steps < pre_train_steps:
+        for epi in range(1, config.num_episodes+1):
+            if finish: break
+            episodeBuffer = experience_buffer()
+            #Reset environment and get first new observation
+            s = np.asarray(env.reset()).flatten()
+            #s = processState(s)
+            d = False
+            rAll = 0
+            j = 0
+            #The Q-Network
+            while (j < config.max_epLength) and (not d): #If the agent takes longer than 200 moves to reach either of the blocks, end the trial.
+                j+=1
+                #Choose an action by greedily (with e chance of random action) from the Q-network
+                if np.random.rand(1) < e or total_steps < config.pre_train_steps:
                    a = np.random.randint(0,env.action_space.n)
                 else:
+                    #if e == 0: print(a)
                     a = sess.run(mainQN.predict,feed_dict={mainQN.input:[s]})[0]
                 s1,r,d,_ = env.step(a)
                 s1 = np.asarray(s1).flatten()
                 total_steps += 1
                 episodeBuffer.add(np.reshape(np.array([s,a,r,s1,d]),[1,5])) #Save the experience to our episode buffer.
 
-                if total_steps > pre_train_steps:
-                    if e > endE:
+                if total_steps > config.pre_train_steps:
+                    if e > config.endE:
                         e -= stepDrop
                         e = max(e,0)
 
                     #if e == 0:  env.visualize_on()
 
-                    if total_steps % (update_freq) == 0:
-                        trainBatch = myBuffer.sample(batch_size) #Get a random batch of experiences.
+                    if total_steps % (config.update_freq) == 0:
+                        trainBatch = myBuffer.sample(config.batch_size) #Get a random batch of experiences.
                         #Below we perform the Double-DQN update to the target Q-values
                         Q1 = sess.run(mainQN.predict,feed_dict={mainQN.input:np.vstack(trainBatch[:,3])})
                         Q2 = sess.run(targetQN.Qout,feed_dict={targetQN.input:np.vstack(trainBatch[:,3])})
                         end_multiplier = -(trainBatch[:,4] - 1)
-                        doubleQ = Q2[range(batch_size),Q1]
-                        targetQ = trainBatch[:,2] + (y*doubleQ * end_multiplier)
+                        doubleQ = Q2[range(config.batch_size),Q1]
+                        targetQ = trainBatch[:,2] + (config.y*doubleQ * end_multiplier)
                         #Update the network with our target values.
                         _ = sess.run(mainQN.updateModel, \
                             feed_dict={mainQN.input:np.vstack(trainBatch[:,0]),mainQN.targetQ:targetQ, mainQN.actions:trainBatch[:,1]})
@@ -246,10 +242,12 @@ def run(env, config):
             k = 150
             if epi % k == 0:
                 acc_rew += np.sum(rList)
+                print(f"Episode {epi} Reward {np.mean(rList)} epsilon {e}")
                 rList = []
                 succ_epi = 0
                 _succ_epi, _acc_rew = evaluate(env, sess, mainQN.predict, mainQN.input)
 
+                yield total_steps, _acc_rew
                 # Save data for future plotting
                 total_interactions.append(total_steps)
                 total_rewards.append(_acc_rew/100.0)
@@ -260,7 +258,12 @@ def run(env, config):
 
 
                     if _succ_epi>=succ_threshold:
+                            print("Evaluation success rate over 100 episodes: {}%; Total reward: {} ".format(_succ_epi, _acc_rew))
                             break
 
-        _succ_epi, _acc_rew = evaluate(env, sess, mainQN.predict, mainQN.input, visualize=False, v_func=mainQN.Value)
+        print("Training succes rate: {}%".format(acc_rew*100.0/epi))
 
+        _succ_epi, _acc_rew = evaluate(env, sess, mainQN.predict, mainQN.input, visualize=False, v_func=mainQN.Value)
+        print("Evaluation success rate over 100 episodes: {}%; Total reward: {} ".format(_succ_epi, _acc_rew))
+
+        #return total_interactions, total_rewards
