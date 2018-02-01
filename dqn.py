@@ -105,10 +105,10 @@ def updateTarget(op_holder,sess):
         sess.run(op)
 
         
-def evaluate(env, sess, q_max, input_ph, visualize=False, v_func=None):
+def evaluate(env, sess, q_max, input_ph, visualize=False, v_func=None, test_rollouts=4):
     succ_epi = 0
     acc_rew = 0
-    for _epi in range(1,5):
+    for _epi in range(1,test_rollouts+1):
         _s = np.asarray(env.reset()).flatten()
         _d = False
         while not _d:
@@ -242,18 +242,22 @@ def run(env, config):
             if epi % config.k == 0:
                 acc_rew += np.sum(rList)
                 print(f"Episode {epi} Reward {np.mean(rList)} epsilon {e}")
+                yield total_steps, np.mean(rList) 
                 rList = []
                 succ_epi = 0
-                _succ_epi, _acc_rew = evaluate(env, sess, mainQN.predict, mainQN.input)
+                _succ_epi, _acc_rew = evaluate(env, sess,
+                        mainQN.predict, mainQN.input, 
+                        test_rollouts=config.test_rollouts)
 
-                yield total_steps, _acc_rew
                 # Save data for future plotting
                 total_interactions.append(total_steps)
                 total_rewards.append(_acc_rew/100.0)
                 if e==0:
 
                     #Evaluate
-                    _succ_epi, _acc_rew = evaluate(env, sess, mainQN.predict, mainQN.input)
+                    _succ_epi, _acc_rew = evaluate(env, sess,
+                        mainQN.predict, mainQN.input,
+                        test_rollouts=config.test_rollouts)
 
 
                     if _succ_epi>=succ_threshold:
@@ -265,4 +269,3 @@ def run(env, config):
         _succ_epi, _acc_rew = evaluate(env, sess, mainQN.predict, mainQN.input, visualize=False, v_func=mainQN.Value)
         print("Evaluation success rate over 100 episodes: {}%; Total reward: {} ".format(_succ_epi, _acc_rew))
 
-        #return total_interactions, total_rewards

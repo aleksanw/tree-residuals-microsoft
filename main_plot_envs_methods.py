@@ -40,7 +40,7 @@ class Config(dict):
 default_tree_config = Config(
         initial_epsilon = 0.50,
         initial_learning_rate = 0.20,
-        learning_iterations = 20,
+        learning_iterations = 1000,
         replay_batch_size = 1,
         rollout_batch_size = 1,
         test_rollouts = 4,
@@ -50,9 +50,11 @@ default_tree_config = Config(
 tree_config = {
         'Blackjack-v0' : default_tree_config + Config(
             #learning_iterations = 350,
+            test_rollouts = 100,
             ),
         'NChain-v0' : default_tree_config + Config(
             learning_iterations = 40,
+            test_rollouts = 10,
             ),
         'Pong-v0' : default_tree_config + Config(
             ),
@@ -90,7 +92,7 @@ default_dqn_config = Config(
         max_epLength = 1000, #The max allowed length of our episode.
         load_model = False, #Whether to load a saved model.
         tau = 0.001, #Rate to update target network toward primary network
-        learning_iterations = 1000, #How many episodes of game environment to train network with.
+        learning_iterations = 5000, #How many episodes of game environment to train network with.
         annealing_steps = 5000, #How many steps of training to reduce startE to endE.
         pre_train_steps = 1000, #How many steps of random actions before training begins.
         hiddens = [50, 50],
@@ -100,11 +102,14 @@ default_dqn_config = Config(
 dqn_config = {
         'Blackjack-v0' : default_dqn_config + Config(
             #learning_iterations = 400,
+            k = 150,
+            test_rollouts = 100,
             ),
         'NChain-v0' : default_dqn_config + Config(
-            learning_iterations = 10, #How many episodes of game environment to train network with.
+            learning_iterations = 20, #How many episodes of game environment to train network with.
             annealing_steps = 10000, #How many steps of training to reduce startE to endE.
             pre_train_steps = 1000, #How many steps of random actions before training begins.
+            test_rollouts = 10,
             k = 1,
             ),
         'Pong-v0' : default_dqn_config + Config(
@@ -184,21 +189,26 @@ def get_current_time():
 
 
 envs= [
-    #'Blackjack-v0',
+    'Blackjack-v0',
     'NChain-v0' ,
     #'Pong-v0',
     ]
 
 agents = [
-    #('tree', run_tree),
+    ('tree', run_tree),
     ('dqn', run_dqn),
     #('ae', run_ae),
     ]
 
 thread_config = {
-        'tree' : 10,
-        'dqn' : 3,
+        'tree' : 20,
+        'dqn' : 20,
         'ae' : 1,
+        }
+
+pool_sizes = {
+        'tree' : 100,
+        'dqn' : 5,
         }
 
 def main():
@@ -206,7 +216,7 @@ def main():
 
     for env_name in envs:
         for agent_name, agent in agents:
-            pool = multiprocessing.Pool()
+            pool = multiprocessing.Pool(processes=pool_sizes[agent_name])
             results = pool.map(agent, [env_name]*thread_config[agent_name])
             config = get_config(results)
             perfs = get_perfs(results)
@@ -224,8 +234,8 @@ def main():
                     )
 
             #write_variables_to_latex(agent_run)
-            plotter.plot_with_mean(agent_run)
             pickler.dump(agent_run)
+            plotter.plot_with_mean(agent_run)
 
 
 if __name__ == '__main__':
