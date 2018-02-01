@@ -82,18 +82,19 @@ ae_tree_config = {
 
 
 default_dqn_config = Config(
-        batch_size = 3, #How many experiences to use for each training step.
+        rollout_batch_size = 3, #How many experiences to use for each training step.
         update_freq = 1, #How often to perform a training step.
         y = .99, #Discount factor on the target Q-values
         startE = 1, #Starting chance of random action
         endE = 0, #0.1 #Final chance of random action
-        max_epLength = 100, #The max allowed length of our episode.
+        max_epLength = 1000, #The max allowed length of our episode.
         load_model = False, #Whether to load a saved model.
         tau = 0.001, #Rate to update target network toward primary network
-        num_episodes = 1000, #How many episodes of game environment to train network with.
+        learning_iterations = 1000, #How many episodes of game environment to train network with.
         annealing_steps = 5000, #How many steps of training to reduce startE to endE.
-        pre_train_steps = 100, #How many steps of random actions before training begins.
+        pre_train_steps = 1000, #How many steps of random actions before training begins.
         hiddens = [50, 50],
+        k = 150,
         )
 
 dqn_config = {
@@ -101,6 +102,10 @@ dqn_config = {
             #learning_iterations = 400,
             ),
         'NChain-v0' : default_dqn_config + Config(
+            learning_iterations = 10, #How many episodes of game environment to train network with.
+            annealing_steps = 10000, #How many steps of training to reduce startE to endE.
+            pre_train_steps = 1000, #How many steps of random actions before training begins.
+            k = 1,
             ),
         'Pong-v0' : default_dqn_config + Config(
             ),
@@ -133,14 +138,8 @@ def run_dqn(env_name):
     env = gym.make(env_name)
     if env_name == 'Blackjack-v0':
         env.observation_space.shape = [3]
-    #config = aggregate_config(env_name, dqn_config)
-    config = dqn_config[env_name]
+    config = aggregate_config(env_name, dqn_config)
     perfs = dqn_agent.run(env, config)
-    '''
-    d_perfs = {}
-    for i, v in perfs:
-        d_perfs[i] = v
-    '''
     return (config, dict(perfs))
 
 
@@ -185,7 +184,7 @@ def get_current_time():
 
 
 envs= [
-    'Blackjack-v0',
+    #'Blackjack-v0',
     'NChain-v0' ,
     #'Pong-v0',
     ]
@@ -197,8 +196,8 @@ agents = [
     ]
 
 thread_config = {
-        'tree' : 4,
-        'dqn' : 1,
+        'tree' : 10,
+        'dqn' : 3,
         'ae' : 1,
         }
 
