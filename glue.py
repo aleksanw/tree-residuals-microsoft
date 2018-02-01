@@ -90,7 +90,6 @@ def run(env, config):
 
         policy = Policy_EpsilonGreedy(q, epsilon=epsilon)
         episodes = [list(rollout(policy, env)) for _ in range(config.rollout_batch_size)]
-        print(len(episodes[0]))
         interaction_count += sum(map(len, episodes))
         replay_buffer += episodes
         sampled_episodes = replay_buffer.sample(config.replay_batch_size)
