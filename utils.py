@@ -4,7 +4,7 @@ import sys
 
 
 def rollout(policy, env):
-    state = env.reset().flatten()
+    state = np.array(env.reset()).flatten()
     done = False
     while not done:
         action = policy(state)
