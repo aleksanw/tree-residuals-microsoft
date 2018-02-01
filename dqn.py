@@ -133,7 +133,7 @@ def run_evaluate(env, sess, q_max, input_ph, visualize=False, v_func=None):
 
 
 def run(env, config):
-    batch_size = 3 #How many experiences to use for each training step.
+    rollout_batch_size = 3 #How many experiences to use for each training step.
     update_freq = 1 #How often to perform a training step.
     y = .99 #Discount factor on the target Q-values
     startE = 1 #Starting chance of random action
@@ -187,7 +187,7 @@ def run(env, config):
         sess.run(init)
 
         succ_epi = 0
-        for epi in range(1, config.num_episodes+1):
+        for epi in range(1, config.learning_iterations+1):
             if finish: break
             episodeBuffer = experience_buffer()
             #Reset environment and get first new observation
@@ -218,12 +218,12 @@ def run(env, config):
                     #if e == 0:  env.visualize_on()
 
                     if total_steps % (config.update_freq) == 0:
-                        trainBatch = myBuffer.sample(config.batch_size) #Get a random batch of experiences.
+                        trainBatch = myBuffer.sample(config.rollout_batch_size) #Get a random batch of experiences.
                         #Below we perform the Double-DQN update to the target Q-values
                         Q1 = sess.run(mainQN.predict,feed_dict={mainQN.input:np.vstack(trainBatch[:,3])})
                         Q2 = sess.run(targetQN.Qout,feed_dict={targetQN.input:np.vstack(trainBatch[:,3])})
                         end_multiplier = -(trainBatch[:,4] - 1)
-                        doubleQ = Q2[range(config.batch_size),Q1]
+                        doubleQ = Q2[range(config.rollout_batch_size),Q1]
                         targetQ = trainBatch[:,2] + (config.y*doubleQ * end_multiplier)
                         #Update the network with our target values.
                         _ = sess.run(mainQN.updateModel, \
@@ -239,8 +239,7 @@ def run(env, config):
             #jList.append(j)
             rList.append(rAll)
 
-            k = 150
-            if epi % k == 0:
+            if epi % config.k == 0:
                 acc_rew += np.sum(rList)
                 print(f"Episode {epi} Reward {np.mean(rList)} epsilon {e}")
                 rList = []
