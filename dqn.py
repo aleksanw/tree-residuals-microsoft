@@ -136,7 +136,7 @@ def run(env, config):
     rollout_batch_size = 3 #How many experiences to use for each training step.
     update_freq = 1 #How often to perform a training step.
     y = .99 #Discount factor on the target Q-values
-    startE = 1 #Starting chance of random action
+    initial_epsilon = 1 #Starting chance of random action
     endE = 0 #0.1 #Final chance of random action
     max_epLength = 100 #The max allowed length of our episode.
     load_model = False #Whether to load a saved model.
@@ -147,7 +147,7 @@ def run(env, config):
     input_shape = list(env.observation_space.shape)
 
     num_episodes = 1000 #How many episodes of game environment to train network with.
-    annealing_steps = 5000. #How many steps of training to reduce startE to endE.
+    annealing_steps = 5000. #How many steps of training to reduce initial_epsilon to endE.
     pre_train_steps = 100 #How many steps of random actions before training begins.
 
     succ_threshold = 100
@@ -167,8 +167,8 @@ def run(env, config):
     myBuffer = experience_buffer()
 
     #Set the rate of random action decrease. 
-    e = config.startE
-    stepDrop = (config.startE - config.endE)/config.annealing_steps
+    e = config.initial_epsilon
+    stepDrop = (config.initial_epsilon - config.endE)/config.annealing_steps
 
     #create lists to contain total rewards and steps per episode
     jList = []
@@ -224,7 +224,7 @@ def run(env, config):
                         Q2 = sess.run(targetQN.Qout,feed_dict={targetQN.input:np.vstack(trainBatch[:,3])})
                         end_multiplier = -(trainBatch[:,4] - 1)
                         doubleQ = Q2[range(config.rollout_batch_size),Q1]
-                        targetQ = trainBatch[:,2] + (config.y*doubleQ * end_multiplier)
+                        targetQ = trainBatch[:,2] + (config.discount*doubleQ * end_multiplier)
                         #Update the network with our target values.
                         _ = sess.run(mainQN.updateModel, \
                             feed_dict={mainQN.input:np.vstack(trainBatch[:,0]),mainQN.targetQ:targetQ, mainQN.actions:trainBatch[:,1]})

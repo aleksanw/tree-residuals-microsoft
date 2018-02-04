@@ -1,10 +1,3 @@
-'''
-import multiprocessing, logging
-mpl = multiprocessing.log_to_stderr()
-mpl.setLevel(logging.INFO)
-'''
-
-
 import matplotlib
 matplotlib.use('Agg')
 import corridor
@@ -50,7 +43,7 @@ default_tree_config = Config(
 tree_config = {
         'Blackjack-v0' : default_tree_config + Config(
             #learning_iterations = 350,
-            test_rollouts = 100,
+            test_rollouts = 1000,
             ),
         'NChain-v0' : default_tree_config + Config(
             learning_iterations = 40,
@@ -86,24 +79,27 @@ ae_tree_config = {
 default_dqn_config = Config(
         rollout_batch_size = 3, #How many experiences to use for each training step.
         update_freq = 1, #How often to perform a training step.
-        y = .99, #Discount factor on the target Q-values
-        startE = 1, #Starting chance of random action
+        discount = .99, #Discount factor on the target Q-values
+        initial_epsilon = 1, #Starting chance of random action
         endE = 0, #0.1 #Final chance of random action
         max_epLength = 1000, #The max allowed length of our episode.
         load_model = False, #Whether to load a saved model.
         tau = 0.001, #Rate to update target network toward primary network
-        learning_iterations = 5000, #How many episodes of game environment to train network with.
-        annealing_steps = 5000, #How many steps of training to reduce startE to endE.
-        pre_train_steps = 1000, #How many steps of random actions before training begins.
+        learning_iterations = 1000, #How many episodes of game environment to train network with.
+        annealing_steps = 1000, #How many steps of training to reduce startE to endE.
+        pre_train_steps = 5, #How many steps of random actions before training begins.
         hiddens = [50, 50],
-        k = 150,
+        k = 1,
+
+        # Hardcoded in the dqn-source
+        initial_learning_rate = 0.0001
         )
 
 dqn_config = {
         'Blackjack-v0' : default_dqn_config + Config(
             #learning_iterations = 400,
             k = 150,
-            test_rollouts = 100,
+            test_rollouts = 1000,
             ),
         'NChain-v0' : default_dqn_config + Config(
             learning_iterations = 20, #How many episodes of game environment to train network with.
@@ -136,7 +132,6 @@ def run_tree(env_name):
     config = aggregate_config(env_name, tree_config)
     perfs = tree_agent.run(env, config)
     return (config, dict(perfs))
-
 
 
 def run_dqn(env_name):
@@ -188,9 +183,9 @@ def get_current_time():
     return time.strftime("%Y_%m_%d_%H_%M")
 
 
-envs= [
+envs = [
     'Blackjack-v0',
-    'NChain-v0' ,
+    #'NChain-v0' ,
     #'Pong-v0',
     ]
 
@@ -221,19 +216,20 @@ def main():
             config = get_config(results)
             perfs = get_perfs(results)
 
-            #wanted_written = ['initial_learning_rate', 'initial_epsilon',
-            #                  'rollout_batch_size', 'num_episodes',
-            #]
+            wanted_written = ['initial_learning_rate', 'initial_epsilon',
+                              'rollout_batch_size', 'num_episodes',
+                              'discount',
+            ]
             agent_run = Config(
                     start_time = start_time,
                     env_name = env_name,
                     agent_name = agent_name,
                     perfs = perfs, 
-                    #wanted_written = wanted_written,
+                    wanted_written = wanted_written,
                     config = config,
                     )
 
-            #write_variables_to_latex(agent_run)
+            write_variables_to_latex(agent_run)
             pickler.dump(agent_run)
             plotter.plot_with_mean(agent_run)
 

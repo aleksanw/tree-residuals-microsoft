@@ -43,21 +43,28 @@ def plot_with_mean(agent_run):
 
 def plot_agents(paths):
     perfs = [pickler.load(path) for path in paths]
-    print(perfs)
     fig = plt.figure()
     ax = fig.gca(xlabel='Interactions with environment',
-                 ylabel=f'Episode reward in env')
+                 ylabel=f'Episode reward in environment')
 
+    '''
+    interaction_limit = 1000
+    for i in range(len(perfs)):
+        for k, v in perfs[i]:
+            if k > 
+    '''
+    print(perfs)
     colors = ['red', 'blue']
+    mean_colors = ['black', 'green']
     df = pd.DataFrame()
     for i in range(len(paths)):
         for j, perf in enumerate(perfs[i]):
             ser =  pd.Series(dict(perf))
             df[j] = ser
-            ser.plot(ax=ax, color=colors[i])
+            ser.plot(ax=ax, color=colors[i], alpha=0.2)
 
         mean = df.mean(axis=1)
         mean_df = pd.DataFrame({f'Average {i}': mean})
-        mean_df.plot(ax=ax, color='orange')
+        mean_df.plot(ax=ax, color=mean_colors[i], alpha=1.0)
     path = compose_path('figures', '.pdf', 'testing')
     plt.savefig(path, format='pdf', dpi=1000)
