@@ -41,30 +41,28 @@ def plot_with_mean(agent_run):
             agent_run.start_time)
     plt.savefig(path, format='pdf', dpi=1000)
 
-def plot_agents(paths):
-    perfs = [pickler.load(path) for path in paths]
+def plot_agents(pickle_path):
+    runs = pickler.load(pickle_path)
+    runs = pd.DataFrame(runs)
+    mean = pd.DataFrame({
+        'Mean': runs.interpolate(axis=1).mean(),
+        })
+    median = pd.DataFrame({
+        'Median': runs.interpolate(axis=1).median(),
+        })
     fig = plt.figure()
-    ax = fig.gca(xlabel='Interactions with environment',
-                 ylabel=f'Episode reward in environment')
+    ax = fig.gca(title='Learning runs for Blackjack',
+                 xlabel='Cumulative step count',
+                 ylabel='Mean episode reward')
 
-    '''
-    interaction_limit = 1000
-    for i in range(len(perfs)):
-        for k, v in perfs[i]:
-            if k > 
-    '''
-    print(perfs)
-    colors = ['red', 'blue']
-    mean_colors = ['black', 'green']
-    df = pd.DataFrame()
-    for i in range(len(paths)):
-        for j, perf in enumerate(perfs[i]):
-            ser =  pd.Series(dict(perf))
-            df[j] = ser
-            ser.plot(ax=ax, color=colors[i], alpha=0.2)
+    for _, run in runs.iterrows():
+        run.dropna().plot(ax=ax, alpha=0.3)
 
-        mean = df.mean(axis=1)
-        mean_df = pd.DataFrame({f'Average {i}': mean})
-        mean_df.plot(ax=ax, color=mean_colors[i], alpha=1.0)
+    mean.plot(ax=ax)
+    median.plot(ax=ax)
+
+    #ax.set_xlim(lims['x'])
+    #ax.set_ylim(lims['y'])
+
     path = compose_path('figures', '.pdf', 'testing')
     plt.savefig(path, format='pdf', dpi=1000)
